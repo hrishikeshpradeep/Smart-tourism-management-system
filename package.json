@@ -1,0 +1,36 @@
+{
+  "name": "referenced-chatgpt-conversation-this-is-an",
+  "version": "1.0.0",
+  "description": "A responsive front-end MVP for an Agile Development Process course project. It is based on the submitted SRS and intentionally avoids claiming live availability, real prices, payments, or bookings.",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "seed": "tsx prisma/seed.ts",
+    "prisma:generate": "prisma generate"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.22.0",
+    "prisma": "^7.9.1"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.5",
+    "typescript": "^7.0.2"
+  }
+}
