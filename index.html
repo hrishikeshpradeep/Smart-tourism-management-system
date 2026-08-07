@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Smart Tourism Management System course-project MVP" />
-  <title>YatraSmart | Smart Tourism Management System</title>
+  <meta name="description" content="SmartYatra — discover, plan and save memorable journeys across India." />
+  <title>SmartYatra | Discover India</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -12,16 +12,21 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="#home" aria-label="YatraSmart home"><span class="brand-mark">✦</span>Yatra<span>Smart</span></a>
+    <a class="brand" href="#home" aria-label="SmartYatra home"><img class="brand-logo" src="assets/smartyatra-logo.png" alt="" />Smart<span>Yatra</span></a>
     <button class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
     <nav aria-label="Main navigation">
       <a href="#explore">Explore</a><a href="#planner">Trip planner</a><a href="#my-trips">My trips</a><a href="#recommendations">For you</a><a href="#how-it-works">How it works</a>
     </nav>
-    <div class="header-actions"><button class="wishlist-button" id="wishlistButton" aria-label="Open saved places">♡ <span id="wishCount">0</span> saved</button><div class="account-menu"><button class="auth-button" id="authButton">Sign in</button><div class="account-popover" id="accountPopover" hidden><span id="accountName">Your account</span><button class="text-button" id="logoutButton" type="button">Sign out</button></div></div></div>
+    <div class="header-actions"><button class="wishlist-button" id="wishlistButton" aria-label="Open saved places">♡ <span id="wishCount">0</span> saved</button><div class="account-menu"><button class="auth-button" id="authButton" aria-haspopup="menu" aria-expanded="false">Sign in</button><div class="account-popover" id="accountPopover" role="menu" hidden><span id="accountName">Your account</span><button class="account-menu-item account-entry" id="accountSettingsButton" type="button" aria-expanded="false">Account <span>›</span></button><div id="accountSettings" hidden><button class="account-menu-item" data-account-action="change-name" type="button">Change username</button><button class="account-menu-item" data-account-action="change-password" type="button">Change password</button></div><div class="account-menu-divider"></div><button class="account-menu-item signout-item" id="logoutButton" type="button">Sign out</button></div></div></div>
   </header>
 
   <main>
-    <section class="hero" id="home">
+    <section class="hero hero-video-layer" id="home">
+      <video class="hero-video" id="heroVideo" autoplay muted playsinline preload="metadata" poster="https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=2000&q=90" aria-label="Aerial view of a scenic Indian travel destination">
+        <source id="heroVideoSource" src="assets/hero-munnar.mp4" type="video/mp4" />
+      </video>
+      <video class="hero-video hero-video-next" id="heroVideoNext" muted playsinline preload="auto" aria-hidden="true"></video>
+      <div class="hero-shade" aria-hidden="true"></div>
       <div class="hero-copy">
         <p class="eyebrow">INDIA, PLANNED THOUGHTFULLY</p>
         <h1>Travel with a plan.<br><em>Remember it forever.</em></h1>
@@ -33,7 +38,7 @@
     </section>
 
     <section class="section explore" id="explore">
-      <div class="section-heading"><div><p class="eyebrow">FIND YOUR NEXT STORY</p><h2>Explore destinations</h2></div><p>Every listing includes indicative costs, the best season, and ideas to help you decide.</p></div>
+      <div class="section-heading"><div><p class="eyebrow">FIND YOUR NEXT STORY</p><h2>Explore destinations</h2></div></div>
       <div class="filter-panel" aria-label="Destination filters">
         <label class="search-box">⌕ <input id="searchInput" type="search" placeholder="Search Goa, mountains, food..." aria-label="Search destinations"></label>
         <label>Travel style<select id="styleFilter"><option value="all">All styles</option><option value="beach">Beach</option><option value="mountain">Mountain</option><option value="heritage">Heritage</option><option value="wildlife">Wildlife</option><option value="city">City break</option></select></label>
@@ -45,7 +50,10 @@
     </section>
 
     <section class="planner-section" id="planner">
-      <div class="planner-intro"><p class="eyebrow">YOUR TRIP, YOUR PACE</p><h2>Build a practical itinerary.</h2><p>Choose the basics and get a clear starting budget. You can edit activities and costs after this course-project prototype is connected to a backend.</p><ul><li>✓ Day-wise travel plan</li><li>✓ Transparent cost estimate</li><li>✓ Suggestions matched to your interests</li></ul></div>
+      <video class="planner-video" id="plannerVideo" muted playsinline preload="metadata" aria-hidden="true"></video>
+      <video class="planner-video planner-video-next" id="plannerVideoNext" muted playsinline preload="auto" aria-hidden="true"></video>
+      <div class="planner-video-shade" aria-hidden="true"></div>
+      <div class="planner-intro"><p class="eyebrow">YOUR TRIP, YOUR PACE</p><h2 id="plannerTitle">Build a practical itinerary.</h2><p>Choose the basics and get a clear starting budget. You can edit activities and costs after this course-project prototype is connected to a backend.</p><ul><li>✓ Day-wise travel plan</li><li>✓ Transparent cost estimate</li><li>✓ Suggestions matched to your interests</li></ul></div>
       <form class="trip-form" id="tripForm">
         <h3>Start your trip</h3>
         <div class="form-row"><label>Destination<select id="tripDestination" required></select></label><label>Travel style<select id="tripStyle"><option value="family">Family</option><option value="solo">Solo</option><option value="couple">Couple</option><option value="friends">Friends</option></select></label></div>
@@ -53,7 +61,6 @@
         <div class="form-row"><label>Travellers<input id="travellers" type="number" min="1" max="12" value="2" required></label><label>Total budget (₹)<input id="tripBudget" type="number" min="1000" value="20000" required></label></div>
         <fieldset><legend>What interests you?</legend><div class="interest-options"><label><input type="checkbox" value="food" checked> Food</label><label><input type="checkbox" value="nature"> Nature</label><label><input type="checkbox" value="culture"> Culture</label><label><input type="checkbox" value="adventure"> Adventure</label></div></fieldset>
         <button class="primary-button full-button" type="submit">Create my estimate <span>→</span></button>
-        <p class="form-note">Demo only: no payment or live booking is collected.</p>
       </form>
     </section>
 
@@ -63,13 +70,27 @@
     </section>
 
     <section class="section recommendation-section" id="recommendations">
-      <div class="section-heading"><div><p class="eyebrow">EXPLAINABLE SUGGESTIONS</p><h2>Made for your kind of trip</h2></div><p>Recommendations use clear preference matching—never hidden fees or claimed live availability.</p></div>
+      <div class="section-heading"><div><p class="eyebrow">CURATED FOR YOU</p><h2>Made for your kind of trip</h2></div></div>
       <div class="recommendation-box" id="recommendationBox"><span class="recommendation-icon">✦</span><div><h3>Tell us what you enjoy</h3><p>Use the planner above, then return here for destination suggestions that explain why they match.</p></div></div>
+    </section>
+
+    <section class="section traveller-reviews" id="reviews">
+      <div class="section-heading"><div><p class="eyebrow">TRAVELLER NOTES</p><h2>Stories from the road</h2></div></div>
+      <div class="review-grid">
+        <article class="review-card"><div class="review-top"><span class="review-avatar">AK</span><div><strong>Ananya K.</strong><small>Verified traveller · Goa</small></div><b>★ 5.0</b></div><p>“The beach and food suggestions made planning a short break feel effortless.”</p></article>
+        <article class="review-card"><div class="review-top"><span class="review-avatar">RV</span><div><strong>Rohan V.</strong><small>Verified traveller · Manali</small></div><b>★ 4.8</b></div><p>“I liked seeing the daily budget before deciding how many days to stay.”</p></article>
+        <article class="review-card"><div class="review-top"><span class="review-avatar">SM</span><div><strong>Shreya M.</strong><small>Verified traveller · Munnar</small></div><b>★ 4.9</b></div><p>“The tea-estate and viewpoint ideas are exactly the calm itinerary I wanted.”</p></article>
+        <article class="review-card"><div class="review-top"><span class="review-avatar">PA</span><div><strong>Pranav A.</strong><small>Verified traveller · Jaipur</small></div><b>★ 4.7</b></div><p>“The map shortcut was useful for checking landmark locations while browsing.”</p></article>
+        <article class="review-card"><div class="review-top"><span class="review-avatar">ND</span><div><strong>Nisha D.</strong><small>Verified traveller · Rishikesh</small></div><b>★ 4.8</b></div><p>“The experience list balanced rafting, yoga and the evening aarti nicely.”</p></article>
+        <article class="review-card"><div class="review-top"><span class="review-avatar">IK</span><div><strong>Irfan K.</strong><small>Verified traveller · Kashmir</small></div><b>★ 4.9</b></div><p>“Clear seasons and cost estimates made it much easier to compare options.”</p></article>
+        <article class="review-card"><div class="review-top"><span class="review-avatar">TL</span><div><strong>Tanvi L.</strong><small>Verified traveller · Udaipur</small></div><b>★ 4.8</b></div><p>“The destination card looks beautiful and still gives the important details.”</p></article>
+        <article class="review-card"><div class="review-top"><span class="review-avatar">GS</span><div><strong>Gautam S.</strong><small>Verified traveller · Hampi</small></div><b>★ 4.7</b></div><p>“A good starting point for travellers who want culture without hidden jargon.”</p></article>
+      </div>
     </section>
 
     <section class="section how-section" id="how-it-works"><p class="eyebrow">SIMPLE BY DESIGN</p><h2>A smarter way to start a trip</h2><div class="steps"><article><span>01</span><h3>Discover</h3><p>Search destinations by location, mood and budget.</p></article><article><span>02</span><h3>Plan</h3><p>Choose dates and create a day-wise travel outline.</p></article><article><span>03</span><h3>Go prepared</h3><p>Keep your estimate, saved places and plan in one place.</p></article></div></section>
   </main>
-  <footer><a class="brand" href="#home"><span class="brand-mark">✦</span>Yatra<span>Smart</span></a><p>Smart Tourism Management System · Agile Development Process course project</p><p>Prototype data is illustrative; costs and availability are not live.</p></footer>
+  <footer><a class="brand" href="#home" aria-label="SmartYatra home"><img class="brand-logo" src="assets/smartyatra-logo.png" alt="" />Smart<span>Yatra</span></a></footer>
 
   <aside class="modal" id="destinationModal" aria-hidden="true" aria-label="Destination details"><div class="modal-card"><button class="modal-close" data-close-modal aria-label="Close">×</button><div id="modalContent"></div></div></aside>
   <aside class="modal" id="wishlistModal" aria-hidden="true" aria-label="Saved destinations"><div class="modal-card small-modal"><button class="modal-close" data-close-modal aria-label="Close">×</button><h2>Saved places</h2><div id="wishlistContent"></div></div></aside>
