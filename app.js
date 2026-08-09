@@ -178,6 +178,8 @@ function startHeroSlideshow(){
   setInterval(updateHero,4500);
 }
 
+const hostedVideoBase='https://rajxgulcgxjxzxjgbpzo.supabase.co/storage/v1/object/public/tourism-videos';
+const hostedVideoUrl=file=>`${hostedVideoBase}/${encodeURIComponent(file)}`;
 const heroVideos=[
   {place:'Jaipur',region:'Rajasthan',file:'hero-jaipur.mp4',line:'Step into stories carved in stone and colour.'},
   {place:'Varanasi',region:'Uttar Pradesh',file:'hero-varanasi.mp4',line:'Feel the living spirit of India by the Ganges.'},
@@ -206,7 +208,7 @@ function startPlannerVideoFlow(){
   const first=$('#plannerVideo'),second=$('#plannerVideoNext');
   if(!first||!second)return;
   let index=0,active=first,standby=second,changing=false,playlist=[],activeStart=0,changeRequest=0;
-  const setSource=(video,clip,autoplay=false,onReady)=>{video.src=`assets/${clip.file}`;video.load();video.addEventListener('loadedmetadata',()=>{video.currentTime=Math.min(clip.start,Math.max(0,video.duration-4.8));if(autoplay)video.play().catch(()=>{});onReady?.();},{once:true});};
+  const setSource=(video,clip,autoplay=false,onReady)=>{video.src=hostedVideoUrl(clip.file);video.load();video.addEventListener('loadedmetadata',()=>{video.currentTime=Math.min(clip.start,Math.max(0,video.duration-4.8));if(autoplay)video.play().catch(()=>{});onReady?.();},{once:true});};
   const advance=()=>{
     if(changing)return;
     changing=true;index=(index+1)%playlist.length;
@@ -250,7 +252,7 @@ function legacyVideoHero(){
     changing=true;index=(index+1)%heroVideos.length;
     const entry=heroVideos[index];
     video.classList.add('is-changing');
-    setTimeout(()=>{source.src=`assets/${entry.file}`;video.load();video.play().catch(()=>{});updateCopy(entry);video.setAttribute('aria-label',`Scenic video of ${entry.place}, ${entry.region}`);video.classList.remove('is-changing');changing=false},300);
+    setTimeout(()=>{source.src=hostedVideoUrl(entry.file);video.load();video.play().catch(()=>{});updateCopy(entry);video.setAttribute('aria-label',`Scenic video of ${entry.place}, ${entry.region}`);video.classList.remove('is-changing');changing=false},300);
   };
   updateCopy(heroVideos[0]);
   video.addEventListener('timeupdate',()=>{if(video.currentTime>=4.95)advance()});
@@ -262,7 +264,7 @@ function startSmoothHeroFlow(){
   if(!copy||!first||!second)return;
   let index=0,changing=false,activeVideo=first,standbyVideo=second;
   const updateCopy=entry=>{copy.innerHTML=`<p class="eyebrow">SMART<span class="brand-yatra">YATRA</span> &middot; ${entry.region.toUpperCase()}</p><h1>Discover <em>${entry.place}.</em></h1><p class="hero-text">${entry.line}</p><a class="primary-button hero-cta" href="#explore">Unleash your dream destination <span>&rarr;</span></a><p class="hero-footnote">CURATED DESTINATIONS &middot; MADE FOR EXPLORERS</p>`};
-  const setSource=(video,entry)=>{video.src=`assets/${entry.file}`;video.load();video.setAttribute('aria-label',`Scenic video of ${entry.place}, ${entry.region}`)};
+  const setSource=(video,entry)=>{video.src=hostedVideoUrl(entry.file);video.load();video.setAttribute('aria-label',`Scenic video of ${entry.place}, ${entry.region}`)};
   const advance=()=>{
     if(changing)return;
     changing=true;index=(index+1)%heroVideos.length;

@@ -11,3 +11,4 @@ work/
 assets/raw-downloads/
 assets/india-tourism-hero.mp4
 assets/*.mp4
+assets/**/*.mp4
