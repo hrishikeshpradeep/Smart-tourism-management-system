@@ -3,17 +3,17 @@ import bcrypt from 'bcrypt';
 import cors from 'cors';
 import express, { NextFunction, Request, Response } from 'express';
 import jwt, { JwtPayload } from 'jsonwebtoken';
-import { ContentStatus, Role } from '../generated/prisma/client.js';
+import { ContentStatus, EmergencyStatus, ProviderType, Role } from '../generated/prisma/client.js';
 import { prisma } from './lib/prisma.js';
 
-const app = express();
+export const app = express();
 const port = Number(process.env.PORT ?? 4000);
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) throw new Error('JWT_SECRET is not set. Add it to .env.');
 const secret: string = jwtSecret;
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
-app.use(express.json());
+app.use(express.json({ limit: '200kb' }));
 
 type AuthRequest = Request & { user?: { id: string; role: Role } };
 const signToken = (id: string, role: Role) => jwt.sign({ sub: id, role }, secret, { expiresIn: '7d' });
@@ -75,6 +75,15 @@ app.get('/api/destinations/:slug', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+app.get('/api/destinations/:slug/services', async (req, res, next) => {
+  try {
+    const destination = await prisma.destination.findFirst({ where: { slug: req.params.slug, status: ContentStatus.PUBLISHED }, select: { id: true } });
+    if (!destination) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Destination was not found.' } });
+    const providers = await prisma.serviceProvider.findMany({ where: { destinationId: destination.id, status: ContentStatus.PUBLISHED }, orderBy: [{ providerType: 'asc' }, { priceFrom: 'asc' }] });
+    res.json(providers.map(provider => ({ ...provider, priceFrom: provider.priceFrom === null ? null : Number(provider.priceFrom) })));
+  } catch (error) { next(error); }
+});
+
 app.get('/api/trips', requireAuth, async (req: AuthRequest, res, next) => {
   try { const trips = await prisma.trip.findMany({ where: { userId: req.user!.id }, include: { destination: true, itineraryDays: { include: { items: true }, orderBy: { dayNumber: 'asc' } }, budgetItems: true }, orderBy: { startDate: 'asc' } }); res.json(trips); } catch (error) { next(error); }
 });
@@ -115,18 +124,53 @@ app.delete('/api/wishlist/:destinationId', requireAuth, async (req: AuthRequest,
 
 app.post('/api/trips', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const { destinationId, title, startDate, endDate, travelers = 1, budget, travelStyle } = req.body ?? {};
+    const { destinationId, title, startDate, endDate, travelers = 1, budget, travelStyle, routeStopIds = [] } = req.body ?? {};
     const start = new Date(startDate), end = new Date(endDate);
     if (!destinationId || !title || Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf()) || end < start || !Number.isInteger(travelers) || travelers < 1 || Number(budget) < 0) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Provide valid trip details and dates.' } });
     const destination = await prisma.destination.findFirst({ where: { id: destinationId, status: ContentStatus.PUBLISHED } });
     if (!destination) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Destination was not found.' } });
     const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-    const trip = await prisma.trip.create({ data: { userId: req.user!.id, destinationId, title: title.trim(), startDate: start, endDate: end, travelers, budget: Number(budget), travelStyle, itineraryDays: { create: Array.from({ length: days }, (_, index) => ({ dayNumber: index + 1, dayDate: new Date(start.getTime() + index * 86400000) })) } }, include: { itineraryDays: true, destination: true } });
+    const requestedStops = Array.isArray(routeStopIds) ? [...new Set(routeStopIds.filter((id): id is string => typeof id === 'string'))].slice(0, 12) : [];
+    const validStops = requestedStops.length ? await prisma.destination.findMany({ where: { id: { in: requestedStops }, status: ContentStatus.PUBLISHED }, select: { id: true } }) : [];
+    const orderedStopIds = [destinationId, ...validStops.map(stop => stop.id).filter(id => id !== destinationId)];
+    const trip = await prisma.trip.create({ data: { userId: req.user!.id, destinationId, title: title.trim(), startDate: start, endDate: end, travelers, budget: Number(budget), travelStyle, itineraryDays: { create: Array.from({ length: days }, (_, index) => ({ dayNumber: index + 1, dayDate: new Date(start.getTime() + index * 86400000) })) }, routeStops: { create: orderedStopIds.map((id, index) => ({ destinationId: id, sequence: index + 1, crowdLevel: index === 0 ? 'Moderate' : 'Comfortable', visitWindow: index === 0 ? 'Early morning' : 'Late afternoon' })) } }, include: { itineraryDays: true, destination: true, routeStops: { include: { destination: true }, orderBy: { sequence: 'asc' } } } });
     res.status(201).json(trip);
+  } catch (error) { next(error); }
+});
+
+app.get('/api/bookings', requireAuth, async (req: AuthRequest, res, next) => {
+  try { const bookings = await prisma.bookingRequest.findMany({ where: { userId: req.user!.id }, include: { provider: true, trip: { include: { destination: true } } }, orderBy: { createdAt: 'desc' } }); res.json(bookings); } catch (error) { next(error); }
+});
+
+app.post('/api/bookings', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { providerId, tripId, startDate, endDate, guests = 1, note } = req.body ?? {};
+    const start = new Date(startDate), end = new Date(endDate);
+    if (typeof providerId !== 'string' || Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf()) || end < start || !Number.isInteger(guests) || guests < 1 || guests > 20) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Provide a provider, valid dates, and 1–20 guests.' } });
+    const provider = await prisma.serviceProvider.findFirst({ where: { id: providerId, status: ContentStatus.PUBLISHED } });
+    if (!provider) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Service provider was not found.' } });
+    if (tripId) { const trip = await prisma.trip.findFirst({ where: { id: tripId, userId: req.user!.id } }); if (!trip) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Trip was not found.' } }); }
+    const booking = await prisma.bookingRequest.create({ data: { userId: req.user!.id, tripId: typeof tripId === 'string' ? tripId : null, providerId: provider.id, providerType: provider.providerType, providerName: provider.name, startDate: start, endDate: end, guests, note: typeof note === 'string' ? note.slice(0, 500) : null } });
+    res.status(201).json(booking);
+  } catch (error) { next(error); }
+});
+
+app.get('/api/emergency-alerts', requireAuth, async (req: AuthRequest, res, next) => {
+  try { res.json(await prisma.emergencyAlert.findMany({ where: { userId: req.user!.id }, orderBy: { createdAt: 'desc' }, take: 20 })); } catch (error) { next(error); }
+});
+
+app.post('/api/emergency-alerts', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { destinationId, latitude, longitude, message } = req.body ?? {};
+    if (typeof destinationId !== 'undefined' && typeof destinationId !== 'string') return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Destination is invalid.' } });
+    if ((latitude !== undefined && !Number.isFinite(Number(latitude))) || (longitude !== undefined && !Number.isFinite(Number(longitude)))) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Location coordinates are invalid.' } });
+    const alert = await prisma.emergencyAlert.create({ data: { userId: req.user!.id, destinationId: typeof destinationId === 'string' ? destinationId : null, latitude: latitude === undefined ? null : Number(latitude), longitude: longitude === undefined ? null : Number(longitude), message: typeof message === 'string' ? message.slice(0, 500) : null, status: EmergencyStatus.OPEN } });
+    res.status(201).json(alert);
   } catch (error) { next(error); }
 });
 
 app.use((_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API route not found.' } }));
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => { console.error(error); res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'An unexpected server error occurred.' } }); });
 
-app.listen(port, () => console.log(`Smart Tourism API running at http://localhost:${port}`));
+if (!process.env.VERCEL) app.listen(port, () => console.log(`Smart Tourism API running at http://localhost:${port}`));
+export default app;

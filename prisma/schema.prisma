@@ -41,7 +41,15 @@ enum ReviewStatus {
 
 enum ProviderType {
   HOTEL
+  RESTAURANT
+  VEHICLE
   GUIDE
+}
+
+enum EmergencyStatus {
+  OPEN
+  ACKNOWLEDGED
+  CLOSED
 }
 
 enum BookingStatus {
@@ -65,6 +73,7 @@ model User {
   wishlists       Wishlist[]
   reviews         Review[]
   bookingRequests BookingRequest[]
+  emergencyAlerts EmergencyAlert[]
 }
 
 model Destination {
@@ -88,6 +97,9 @@ model Destination {
   trips       Trip[]
   wishlists   Wishlist[]
   reviews     Review[]
+  providers   ServiceProvider[]
+  routeStops  TripStop[]
+  emergencyAlerts EmergencyAlert[]
 }
 
 model Attraction {
@@ -123,6 +135,7 @@ model Trip {
   itineraryDays ItineraryDay[]
   budgetItems   BudgetItem[]
   bookingRequests BookingRequest[]
+  routeStops     TripStop[]
 }
 
 model ItineraryDay {
@@ -194,6 +207,7 @@ model BookingRequest {
   tripId       String?
   providerType ProviderType
   providerName String
+  providerId   String?
   startDate    DateTime      @db.Date
   endDate      DateTime      @db.Date
   guests       Int
@@ -204,4 +218,49 @@ model BookingRequest {
   updatedAt    DateTime      @updatedAt
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   trip         Trip?         @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  provider     ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+}
+
+model TripStop {
+  id            String      @id @default(cuid())
+  tripId        String
+  destinationId String
+  sequence      Int
+  crowdLevel    String?
+  visitWindow   String?
+  trip          Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  @@unique([tripId, sequence])
+}
+
+model ServiceProvider {
+  id            String        @id @default(cuid())
+  destinationId String
+  providerType  ProviderType
+  name          String
+  description   String
+  contactPhone  String?
+  priceFrom     Decimal?      @db.Decimal(10, 2)
+  status        ContentStatus @default(PUBLISHED)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  destination   Destination   @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  bookings      BookingRequest[]
+  @@unique([destinationId, providerType, name])
+  @@index([destinationId, providerType])
+}
+
+model EmergencyAlert {
+  id            String          @id @default(cuid())
+  userId        String
+  destinationId String?
+  latitude      Decimal?        @db.Decimal(9, 6)
+  longitude     Decimal?        @db.Decimal(9, 6)
+  message       String?
+  status        EmergencyStatus @default(OPEN)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destination   Destination?    @relation(fields: [destinationId], references: [id], onDelete: SetNull)
+  @@index([userId, createdAt])
 }

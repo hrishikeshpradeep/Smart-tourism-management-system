@@ -59,6 +59,27 @@ Then open `http://127.0.0.1:8000`.
 4. Select a destination, dates, travelers, and interests in **Trip planner**.
 5. Click **Create my estimate** and review the suggested destinations and cost message.
 
-## Important MVP limitation
+## Supabase-backed API
 
-This is a front-end prototype. The data is seeded in `app.js`, and the wishlist is stored only in the current browser. To turn it into a full-stack submission, add an API, database, real authentication, server-side role checks, admin dashboard, and tests as described in the SRS.
+The project now uses Express, Prisma, and Supabase PostgreSQL for accounts, destinations, wishlists, trips, route stops, service-provider requests, and SOS location records.
+
+1. Copy `.env.example` to `.env` and add your Supabase Session Pooler `DATABASE_URL` plus a new long `JWT_SECRET`.
+2. Run `npm install`, `npx prisma migrate deploy`, and `npm run seed`.
+3. Run `npm run dev` for the local API at `http://localhost:4000`.
+
+## Vercel deployment
+
+The same repository can deploy both the static website and the `/api` serverless API. In Vercel Project Settings → Environment Variables, add:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Supabase Session Pooler URI, with the password URL-encoded |
+| `JWT_SECRET` | A new long random secret |
+| `CORS_ORIGIN` | Your production `https://…vercel.app` URL |
+| `PORT` | `4000` (local development only; optional on Vercel) |
+
+Do not put database passwords, JWT secrets, or Supabase service-role keys in browser JavaScript or GitHub. Tourism videos remain in Supabase Storage and are loaded through public URLs.
+
+## Demonstration boundary
+
+The project persists planning requests in Supabase. Vehicle selections create a booking request for a provider; availability and payment confirmation remain outside this course-project prototype. SOS records save a prepared location only—call `112` for a real emergency.

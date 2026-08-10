@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { ContentStatus } from '../generated/prisma/client.js';
+import { ContentStatus, ProviderType } from '../generated/prisma/client.js';
 import { prisma } from '../src/lib/prisma.js';
 
 const destinations = [
@@ -35,6 +35,15 @@ const sampleReviews = [
 
 async function main() {
   for (const d of destinations) await prisma.destination.upsert({ where: { slug: d.slug }, update: { ...d, status: ContentStatus.PUBLISHED, attractions: { deleteMany: {}, create: d.attractions.map(name => ({ name, category: 'experience', description: `A popular ${name} experience.`, entryFee: 0 })) } }, create: { ...d, status: ContentStatus.PUBLISHED, attractions: { create: d.attractions.map(name => ({ name, category: 'experience', description: `A popular ${name} experience.`, entryFee: 0 })) } } });
+  for (const destination of await prisma.destination.findMany({ select: { id: true, name: true, category: true } })) {
+    const vehicleLabel = destination.category === 'mountain' || destination.category === 'adventure' ? 'Hills & Highway SUV' : 'Local Explorer Cab';
+    const providers = [
+      { providerType: ProviderType.HOTEL, name: `${destination.name} Comfort Stay`, description: 'A course-project sample stay provider near the destination centre.', priceFrom: 2600 },
+      { providerType: ProviderType.RESTAURANT, name: `${destination.name} Local Table`, description: 'A course-project sample restaurant serving regional favourites.', priceFrom: 450 },
+      { providerType: ProviderType.VEHICLE, name: vehicleLabel, description: 'A course-project sample vehicle provider for local sightseeing.', priceFrom: 1400 }
+    ];
+    for (const provider of providers) await prisma.serviceProvider.upsert({ where: { destinationId_providerType_name: { destinationId: destination.id, providerType: provider.providerType, name: provider.name } }, update: provider, create: { ...provider, destinationId: destination.id } });
+  }
   for (const review of sampleReviews) {
     const user = await prisma.user.upsert({ where: { email: review.email }, update: { name: review.name, preferencesJson: { source: 'course-project-demo', approvedFeedback: true } }, create: { name: review.name, email: review.email, passwordHash: 'DEMO_ACCOUNT_NOT_FOR_LOGIN', preferencesJson: { source: 'course-project-demo', approvedFeedback: true } } });
     const destination = await prisma.destination.findUniqueOrThrow({ where: { slug: review.slug } });

@@ -24,7 +24,7 @@ Object.assign(destinations.find(d=>d.id==='jaipur'),{cost:3300});
 Object.assign(destinations.find(d=>d.id==='varanasi'),{cost:2500});
 Object.assign(destinations.find(d=>d.id==='coorg'),{cost:3400});
 let wishlist = JSON.parse(localStorage.getItem('yatraSmartWishlist') || '[]');
-const API_BASE_URL = 'http://localhost:4000/api';
+const API_BASE_URL = ['localhost','127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:4000/api' : '/api';
 const imageBySlug = {goa:'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=1800&q=88',manali:'https://images.unsplash.com/photo-1626621331169-5f34be280ed9?auto=format&fit=crop&w=1800&q=88',jaipur:'https://images.unsplash.com/photo-1477587458883-47145ed94245?auto=format&fit=crop&w=1800&q=88',munnar:'https://images.unsplash.com/photo-1595815771614-ade9d652a65d?auto=format&fit=crop&w=1800&q=88'};
 const localPlaceImages = {goa:'assets/place-goa.jpg',manali:'assets/place-manali.jpg',munnar:'assets/place-munnar.jpg',varanasi:'assets/place-varanasi.jpg',coorg:'assets/place-coorg-hills.png',kashmir:'assets/place-kashmir-snow.png',ladakh:'assets/place-ladakh.jpg',hampi:'assets/place-hampi-v2.jpg',ooty:'assets/place-ooty-train.png'};
 const placeImageTitles = {goa:'Goa',manali:'Manali,_Himachal_Pradesh',jaipur:'Hawa_Mahal',munnar:'Munnar',varanasi:'Varanasi',coorg:'Kodagu_district',kashmir:'Dal_Lake',ladakh:'Ladakh',rishikesh:'Rishikesh',udaipur:'Udaipur',andaman:'Andaman_and_Nicobar_Islands',darjeeling:'Darjeeling',pondicherry:'Puducherry',hampi:'Hampi',ooty:'Ooty'};
@@ -59,6 +59,21 @@ function renderTravelAssistant(){
   const serviceCopy={beach:['Seaside Haven Hotel','Coastal Table','Private cab from ₹1,200'],mountain:['Valley View Stay','Hillside Kitchen','Day cab from ₹1,600'],heritage:['Heritage Courtyard','Local Flavours','City cab from ₹1,000'],wildlife:['Forest Edge Lodge','Plantation Café','Day cab from ₹1,500'],adventure:['Trailside Camp','Explorer’s Kitchen','4×4 cab from ₹2,200']}[selected?.style]||['Local Stay','Neighbourhood Kitchen','Cab on request'];
   services.innerHTML=`<div class="service-group"><span>STAY NEAR ${selected?.name||'YOUR DESTINATION'}</span><strong>${serviceCopy[0]}</strong><small>Comfortable base for your day plan</small></div><div class="service-group"><span>LOCAL DINING</span><strong>${serviceCopy[1]}</strong><small>Popular regional flavours nearby</small></div><div class="vehicle-options"><p>VEHICLE OPTIONS</p>${['Compact cab','SUV / family','Tempo traveller'].map((vehicle,index)=>`<button data-vehicle="${vehicle}" type="button"><span>${vehicle}</span><b>${index===0?serviceCopy[2]:index===1?'From ₹2,000':'From ₹3,400'}</b></button>`).join('')}</div>`;
   persistRoute();
+  if(selected)loadTravelServices(selected);
+}
+async function loadTravelServices(place){
+  const key=routeKey(place),services=$('#localServices');
+  if(!key||!services)return;
+  try{
+    const response=await fetch(`${API_BASE_URL}/destinations/${encodeURIComponent(key)}/services`);
+    if(!response.ok)throw new Error('Services unavailable');
+    const providers=await response.json();
+    if(routeKey(destination($('#tripDestination')?.value))!==key)return;
+    const byType=type=>providers.filter(provider=>provider.providerType===type);
+    const first=type=>byType(type)[0];
+    const hotel=first('HOTEL'),restaurant=first('RESTAURANT'),vehicles=byType('VEHICLE');
+    services.innerHTML=`<div class="service-group"><span>STAY NEAR ${place.name}</span><strong>${hotel?.name||'No stay listed yet'}</strong><small>${hotel?`From ${money(Number(hotel.priceFrom||0))} · ${hotel.description}`:'Add provider data from the administrator dashboard.'}</small></div><div class="service-group"><span>LOCAL DINING</span><strong>${restaurant?.name||'No dining listing yet'}</strong><small>${restaurant?`From ${money(Number(restaurant.priceFrom||0))} · ${restaurant.description}`:'Add provider data from the administrator dashboard.'}</small></div><div class="vehicle-options"><p>VEHICLE OPTIONS</p>${vehicles.length?vehicles.map(vehicle=>`<button data-vehicle="${vehicle.name}" data-provider-id="${vehicle.id}" type="button"><span>${vehicle.name}</span><b>From ${money(Number(vehicle.priceFrom||0))}</b></button>`).join(''):'<small>No vehicle providers are listed yet.</small>'}</div>`;
+  }catch{ /* The card keeps its useful local planning fallback until the API is reachable. */ }
 }
 function addRouteStop(id){if(!destination(id))return;if(routeStopIds.includes(id)){showToast('That place is already in your route.');return}routeStopIds.push(id);renderTravelAssistant();showToast(`${destination(id).name} added to your route.`)}
 function optimiseRoute(){if(routeStopIds.length<2){showToast('Add at least two places to optimise your route.');return}routeStopIds.sort((a,b)=>{const order={heritage:1,food:2,beach:3,mountain:4,wildlife:5,adventure:6};return (order[destination(a)?.style]||9)-(order[destination(b)?.style]||9)});renderTravelAssistant();showToast('Your route is organised for a smoother day of travel.');}
@@ -146,6 +161,7 @@ function selectSuggestedDestination(card){
 function saveCurrentTrip(){
   const selected=destination($('#tripDestination').value);
   if(!selected)return;
+  if(session){location.hash='my-trips';loadMyTrips();showToast('Your estimate is saved in My trips.');return}
   const saved=JSON.parse(localStorage.getItem('smartYatraSavedTrips')||'[]');
   saved.unshift({id:Date.now(),destinationName:selected.name,title:`My ${selected.name} Adventure`,startDate:$('#startDate').value,endDate:$('#endDate').value,travelers:Number($('#travellers').value)||1,budget:Number($('#tripBudget').value)||0,travelStyle:$('#tripStyle').value||'Flexible'});
   localStorage.setItem('smartYatraSavedTrips',JSON.stringify(saved));
@@ -164,6 +180,26 @@ document.addEventListener('click',event=>{
 
 $('#tripForm').addEventListener('submit',showEstimateSummary);
 
+async function createVehicleBooking(providerId, providerName){
+  if(!session){showToast('Sign in to send a vehicle booking request.');openAuth();return}
+  try{
+    const response=await fetch(`${API_BASE_URL}/bookings`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.token}`},body:JSON.stringify({providerId,startDate:$('#startDate').value,endDate:$('#endDate').value,guests:Number($('#travellers').value)||1,note:`Vehicle request for ${providerName}`})});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error?.message||'Booking request could not be saved.');
+    showToast(`${providerName} request saved. A provider confirmation is still required.`);
+  }catch(error){showToast(error.message)}
+}
+async function recordEmergencyAlert(position){
+  const status=$('#sosStatus'),selected=destination($('#tripDestination').value);
+  if(!session){status.textContent='Location is ready. Sign in to save this SOS record; call 112 if help is urgent.';return}
+  try{
+    const response=await fetch(`${API_BASE_URL}/emergency-alerts`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.token}`},body:JSON.stringify({destinationId:selected?.id,latitude:position.coords.latitude,longitude:position.coords.longitude,message:'SOS location prepared from SmartYatra'})});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error?.message||'SOS record could not be saved.');
+    status.textContent='Your SOS location record is saved. Call 112 immediately if you need urgent help.';
+  }catch(error){status.textContent=error.message}
+}
+
 document.addEventListener('click',event=>{
   const addButton=event.target.closest('[data-add-route]');
   if(addButton){addRouteStop($('#routeDestinationSelect').value);return}
@@ -171,8 +207,8 @@ document.addEventListener('click',event=>{
   if(removeButton){routeStopIds=routeStopIds.filter(id=>id!==removeButton.dataset.removeRoute);renderTravelAssistant();return}
   if(event.target.closest('[data-optimize-route]')){optimiseRoute();return}
   const vehicle=event.target.closest('[data-vehicle]');
-  if(vehicle){showToast(`${vehicle.dataset.vehicle} is reserved as a planning preference. Confirm with a provider when you travel.`);return}
-  if(event.target.closest('[data-share-location]')){const status=$('#sosStatus');if(!navigator.geolocation){status.textContent='Location sharing is not available in this browser.';return}status.textContent='Getting your location…';navigator.geolocation.getCurrentPosition(()=>{status.textContent='Location is ready to share with your emergency contact.';showToast('Your location is ready to share.');},()=>{status.textContent='Location permission was not granted. Call 112 if help is urgent.'});}
+  if(vehicle){const providerId=vehicle.dataset.providerId;if(providerId)createVehicleBooking(providerId,vehicle.dataset.vehicle);else showToast(`${vehicle.dataset.vehicle} is available as a planning preference.`);return}
+  if(event.target.closest('[data-share-location]')){const status=$('#sosStatus');if(!navigator.geolocation){status.textContent='Location sharing is not available in this browser.';return}status.textContent='Getting your location…';navigator.geolocation.getCurrentPosition(position=>{recordEmergencyAlert(position);showToast('Your location is ready to share.');},()=>{status.textContent='Location permission was not granted. Call 112 if help is urgent.'});}
 });
 
 function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]))}
