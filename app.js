@@ -211,6 +211,23 @@ const heroVideos=[
 ];
 
 const plannerVideoByDestination={goa:'goa.mp4',manali:'manali.mp4',munnar:'munnar.mp4',jaipur:'jaipur.mp4',varanasi:'varanasi.mp4',kashmir:'kashmir.mp4',ladakh:'ladakh.mp4',rishikesh:'rishikesh.mp4',coorg:'coorg.mp4',ooty:'ooty.mp4',darjeeling:'darjeeling.mp4',hampi:'hampi.mp4',udaipur:'udaipur.mp4',pondicherry:'pondicherry.mp4',andaman:'andaman.mp4'};
+const plannerCopyByDestination={
+  goa:'Let sea breezes, golden sunsets and easy coastal days shape a trip that feels effortlessly yours.',
+  manali:'Give every day a Himalayan rhythm—cedar trails, warm cafés and views that stay with you.',
+  jaipur:'Make room for royal colour, craft-filled lanes and the timeless glow of the Pink City.',
+  munnar:'Slow down among tea-covered hills, misty mornings and the quiet beauty of the Western Ghats.',
+  varanasi:'Follow the river’s ancient rhythm through glowing ghats, sacred rituals and unforgettable stories.',
+  coorg:'Set your own pace through coffee country, rain-washed forests and wonderfully unhurried escapes.',
+  kashmir:'Let alpine lakes, flowered meadows and sweeping mountain light guide a truly cinematic journey.',
+  ladakh:'Build your days around high passes, clear mountain air and the vast stillness of the Himalayas.',
+  rishikesh:'Balance river adventure with restorative pauses along the peaceful, ever-flowing Ganga.',
+  udaipur:'Plan a graceful escape of lake sunsets, palace walks and quietly romantic evenings.',
+  andaman:'Move between clear blue water, coral adventures and slow island moments made to remember.',
+  darjeeling:'Follow misty tea slopes, heritage railways and the first light on the Kanchenjunga range.',
+  pondicherry:'Mix sea-side calm with French-quarter charm, thoughtful cafés and sunny promenade walks.',
+  hampi:'Let ancient stone, boulder-strewn horizons and golden sunsets set the pace for your exploration.',
+  ooty:'Enjoy cool mountain air, winding train journeys and the gentle green beauty of the Nilgiris.'
+};
 let plannerVideoController=null;
 function setPlannerDestinationTheme(place){
   if(!place)return;
@@ -220,6 +237,7 @@ function setPlannerDestinationTheme(place){
   planner.style.setProperty('--planner-accent',accent);
   planner.style.setProperty('--planner-soft',soft);
   $('#plannerTitle').textContent=`Build a practical itinerary for ${place.name}.`;
+  $('#plannerSubtitle').textContent=plannerCopyByDestination[place.slug||place.id]||'Shape each day around the moments that make this place unforgettable.';
   plannerVideoController?.setPlace(place.slug||place.id);
 }
 function startPlannerVideoFlow(){
