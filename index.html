@@ -15,7 +15,7 @@
     <a class="brand" href="#home" aria-label="SmartYatra home"><img class="brand-logo" src="assets/smartyatra-logo.png" alt="" />Smart<span>Yatra</span></a>
     <button class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
     <nav aria-label="Main navigation">
-      <a href="#explore">Explore</a><a href="#planner">Trip planner</a><a href="#my-trips">My trips</a><a href="#recommendations">For you</a><a href="#how-it-works">How it works</a>
+      <a href="#explore">Explore</a><a href="#planner">Trip planner</a><a href="#travel-assistant">Travel assistant</a><a href="#my-trips">My trips</a><a href="#recommendations">For you</a><a href="#how-it-works">How it works</a>
     </nav>
     <div class="header-actions"><button class="wishlist-button" id="wishlistButton" aria-label="Open saved places">♡ <span id="wishCount">0</span> saved</button><div class="account-menu"><button class="auth-button" id="authButton" aria-haspopup="menu" aria-expanded="false">Sign in</button><div class="account-popover" id="accountPopover" role="menu" hidden><span id="accountName">Your account</span><button class="account-menu-item account-entry" id="accountSettingsButton" type="button" aria-expanded="false">Account <span>›</span></button><div id="accountSettings" hidden><button class="account-menu-item" data-account-action="change-name" type="button">Change username</button><button class="account-menu-item" data-account-action="change-password" type="button">Change password</button></div><div class="account-menu-divider"></div><button class="account-menu-item signout-item" id="logoutButton" type="button">Sign out</button></div></div></div>
   </header>
@@ -62,6 +62,16 @@
         <fieldset><legend>What interests you?</legend><div class="interest-options"><label><input type="checkbox" value="food" checked> Food</label><label><input type="checkbox" value="nature"> Nature</label><label><input type="checkbox" value="culture"> Culture</label><label><input type="checkbox" value="adventure"> Adventure</label></div></fieldset>
         <button class="primary-button full-button" type="submit">Create my estimate <span>→</span></button>
       </form>
+    </section>
+
+    <section class="section travel-assistant" id="travel-assistant">
+      <div class="section-heading"><div><p class="eyebrow">SMART TRIP COMPANION</p><h2>Plan a city day with confidence</h2></div><p>Build a multi-stop route, compare travel options and keep useful local guidance in one place.</p></div>
+      <div class="assistant-grid">
+        <article class="assistant-card route-card"><div class="assistant-card-heading"><span class="assistant-icon">⌁</span><div><p>SMART PLACE ORDERING</p><h3>Your selected stops</h3></div></div><div class="route-picker"><select id="routeDestinationSelect" aria-label="Choose a destination for your route"></select><button data-add-route type="button">Add stop</button></div><div class="route-stops" id="routeStops"></div><button class="assistant-button" data-optimize-route type="button">Optimise my route <span>→</span></button><small class="assistant-note">Order is a planning suggestion based on trip flow and estimated crowd comfort.</small></article>
+        <article class="assistant-card insight-card"><div class="assistant-card-heading"><span class="assistant-icon">◌</span><div><p>CROWD GUIDANCE</p><h3>Visit with better timing</h3></div></div><div id="crowdInsights" class="crowd-insights"></div></article>
+        <article class="assistant-card service-card"><div class="assistant-card-heading"><span class="assistant-icon">✦</span><div><p>LOCAL SERVICES</p><h3>Stay, dine and move</h3></div></div><div id="localServices" class="local-services"></div></article>
+        <article class="assistant-card safety-card"><div class="assistant-card-heading"><span class="assistant-icon">＋</span><div><p>TRAVEL SAFETY</p><h3>Emergency SOS</h3></div></div><p>If you need urgent help, contact local emergency services first. You can also prepare a location message here.</p><div class="safety-actions"><a class="sos-call" href="tel:112">Call 112</a><button class="sos-share" data-share-location type="button">Share location</button></div><small id="sosStatus">For demonstration, no alert is sent automatically.</small></article>
+      </div>
     </section>
 
     <section class="section trips-section" id="my-trips">
