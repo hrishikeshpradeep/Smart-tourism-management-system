@@ -45,15 +45,22 @@ function matches(d){const q=$('#searchInput').value.toLowerCase().trim(),style=$
 function renderDestinations(){const items=destinations.filter(matches);$('#resultsCount').textContent=`${items.length} ${items.length===1?'destination':'destinations'} found`;grid.innerHTML=items.length?items.map(d=>`<article class="destination-card"><button class="destination-image-button" data-detail="${d.id}" aria-label="View details for ${d.name}"><img src="${d.image}" alt="${d.name}, ${d.region}"><span>Explore ${d.name} <b>↗</b></span></button><button class="save-card" data-save="${d.id}" aria-label="Save ${d.name}">${wishlist.includes(d.id)?'♥':'♡'}</button><div class="card-content"><div class="meta"><span>${d.region}</span><span>★ ${d.rating}</span></div><h3>${d.name}</h3><div class="meta"><span>${d.style}</span><span>from ${money(d.cost)}/day</span></div><span class="tag">Best: ${d.best}</span><div class="card-actions"><button data-detail="${d.id}">View details</button><button data-plan="${d.id}">Plan trip</button></div></div></article>`).join(''):'<p class="empty">No destinations match those filters. Try clearing a filter.</p>'}
 function destination(id){return destinations.find(d=>d.id===id)}
 let routeStopIds=JSON.parse(localStorage.getItem('smartYatraRouteStops')||'[]');
+let activeRouteStopId=localStorage.getItem('smartYatraActiveRouteStop')||'';
+let currentTripId=localStorage.getItem('smartYatraCurrentTrip')||'';
+let serviceRequestToken=0;
 const routeKey=place=>place?.slug||place?.id;
 function persistRoute(){localStorage.setItem('smartYatraRouteStops',JSON.stringify(routeStopIds))}
+function setActiveRouteStop(id){activeRouteStopId=destination(id)?.id||'';localStorage.setItem('smartYatraActiveRouteStop',activeRouteStopId)}
+function activeRoutePlace(){const places=routeStopIds.map(destination).filter(Boolean);return destination(activeRouteStopId)||places[0]||destination($('#tripDestination')?.value)||destinations[0]}
 function renderTravelAssistant(){
   const picker=$('#routeDestinationSelect'),stops=$('#routeStops'),crowd=$('#crowdInsights'),services=$('#localServices');
   if(!picker||!stops||!crowd||!services)return;
   picker.innerHTML=destinations.map(d=>`<option value="${d.id}">${formatDestinationOption(d)}</option>`).join('');
   routeStopIds=routeStopIds.filter(id=>destination(id));
-  const places=routeStopIds.map(destination).filter(Boolean),selected=destination($('#tripDestination')?.value)||places[0]||destinations[0];
-  stops.innerHTML=places.length?places.map((place,index)=>`<div class="route-stop"><b>${String(index+1).padStart(2,'0')}</b><span><strong>${place.name}</strong><small>${place.region}</small></span><button data-remove-route="${place.id}" aria-label="Remove ${place.name}">×</button></div>`).join(''):'<p class="route-empty">Add two or more destinations to create a multi-stop city route.</p>';
+  const places=routeStopIds.map(destination).filter(Boolean);
+  if(places.length&&!places.some(place=>place.id===activeRouteStopId))setActiveRouteStop(places[0].id);
+  const selected=activeRoutePlace();
+  stops.innerHTML=places.length?places.map((place,index)=>`<div class="route-stop ${place.id===selected?.id?'is-active':''}" data-route-active="${place.id}" role="button" tabindex="0" aria-label="Show local guidance for ${place.name}"><b>${String(index+1).padStart(2,'0')}</b><span><strong>${place.name}</strong><small>${place.region}</small></span><button data-remove-route="${place.id}" aria-label="Remove ${place.name}">×</button></div>`).join(''):'<p class="route-empty">Add two or more destinations to create a multi-stop city route.</p>';
   const crowdLevel=selected?.style==='heritage'?'High':selected?.style==='beach'?'Moderate':'Comfortable';
   crowd.innerHTML=selected?`<div class="crowd-badge ${crowdLevel.toLowerCase()}">${crowdLevel}</div><h4>${selected.name} visitor outlook</h4><p>Best window: <strong>early morning or late afternoon</strong>. The suggested route places this stop away from peak visitor hours.</p><small>Planning estimate — not live crowd data.</small>`:'';
   const serviceCopy={beach:['Seaside Haven Hotel','Coastal Table','Private cab from ₹1,200'],mountain:['Valley View Stay','Hillside Kitchen','Day cab from ₹1,600'],heritage:['Heritage Courtyard','Local Flavours','City cab from ₹1,000'],wildlife:['Forest Edge Lodge','Plantation Café','Day cab from ₹1,500'],adventure:['Trailside Camp','Explorer’s Kitchen','4×4 cab from ₹2,200']}[selected?.style]||['Local Stay','Neighbourhood Kitchen','Cab on request'];
@@ -62,20 +69,20 @@ function renderTravelAssistant(){
   if(selected)loadTravelServices(selected);
 }
 async function loadTravelServices(place){
-  const key=routeKey(place),services=$('#localServices');
+  const key=routeKey(place),services=$('#localServices'),request=++serviceRequestToken;
   if(!key||!services)return;
   try{
     const response=await fetch(`${API_BASE_URL}/destinations/${encodeURIComponent(key)}/services`);
     if(!response.ok)throw new Error('Services unavailable');
     const providers=await response.json();
-    if(routeKey(destination($('#tripDestination')?.value))!==key)return;
+    if(request!==serviceRequestToken||routeKey(activeRoutePlace())!==key)return;
     const byType=type=>providers.filter(provider=>provider.providerType===type);
     const first=type=>byType(type)[0];
     const hotel=first('HOTEL'),restaurant=first('RESTAURANT'),vehicles=byType('VEHICLE');
     services.innerHTML=`<div class="service-group"><span>STAY NEAR ${place.name}</span><strong>${hotel?.name||'No stay listed yet'}</strong><small>${hotel?`From ${money(Number(hotel.priceFrom||0))} · ${hotel.description}`:'Add provider data from the administrator dashboard.'}</small></div><div class="service-group"><span>LOCAL DINING</span><strong>${restaurant?.name||'No dining listing yet'}</strong><small>${restaurant?`From ${money(Number(restaurant.priceFrom||0))} · ${restaurant.description}`:'Add provider data from the administrator dashboard.'}</small></div><div class="vehicle-options"><p>VEHICLE OPTIONS</p>${vehicles.length?vehicles.map(vehicle=>`<button data-vehicle="${vehicle.name}" data-provider-id="${vehicle.id}" type="button"><span>${vehicle.name}</span><b>From ${money(Number(vehicle.priceFrom||0))}</b></button>`).join(''):'<small>No vehicle providers are listed yet.</small>'}</div>`;
   }catch{ /* The card keeps its useful local planning fallback until the API is reachable. */ }
 }
-function addRouteStop(id){if(!destination(id))return;if(routeStopIds.includes(id)){showToast('That place is already in your route.');return}routeStopIds.push(id);renderTravelAssistant();showToast(`${destination(id).name} added to your route.`)}
+function addRouteStop(id){if(!destination(id))return;if(routeStopIds.includes(id)){setActiveRouteStop(id);renderTravelAssistant();showToast(`${destination(id).name} is already in your route.`);return}routeStopIds.push(id);setActiveRouteStop(id);renderTravelAssistant();showToast(`${destination(id).name} added to your route.`)}
 function optimiseRoute(){if(routeStopIds.length<2){showToast('Add at least two places to optimise your route.');return}routeStopIds.sort((a,b)=>{const order={heritage:1,food:2,beach:3,mountain:4,wildlife:5,adventure:6};return (order[destination(a)?.style]||9)-(order[destination(b)?.style]||9)});renderTravelAssistant();showToast('Your route is organised for a smoother day of travel.');}
 function openModal(id){const d=destination(id),[primary,accent,soft]=destinationPalettes[d.slug||d.id]||destinationPalettes.goa,mapQuery=encodeURIComponent(`${d.name}, ${d.region}, India`);$('#modalContent').innerHTML=`<article class="destination-detail" style="--place-primary:${primary};--place-accent:${accent};--place-soft:${soft}"><header class="detail-heading"><div><p class="detail-kicker">CURATED ESCAPE</p><h2>${d.name}</h2><p class="detail-location">${d.region} <span>•</span> ★ ${d.rating} traveller rating</p></div><a class="map-link" href="https://www.google.com/maps/search/?api=1&query=${mapQuery}" target="_blank" rel="noopener noreferrer" aria-label="Open ${d.name} in Google Maps"><span aria-hidden="true">⌖</span> Open in Maps</a></header><div class="place-image-frame"><img class="detail-hero" src="${d.image}" alt="${d.name}, ${d.region}"><span class="place-image-caption">${d.style} escape</span></div><p class="detail-summary">${d.summary}</p><div class="detail-cubes"><div class="detail-cube"><span class="cube-icon">₹</span><small>Daily budget</small><strong>${money(d.cost)}</strong><em>per traveller</em></div><div class="detail-cube"><span class="cube-icon">☀</span><small>Ideal season</small><strong>${d.best}</strong><em>best weather window</em></div></div><section class="experiences"><p class="detail-kicker">MAKE IT YOURS</p><h3>Suggested experiences</h3><div class="experience-list">${d.attractions.map((a,index)=>`<span><b>${String(index+1).padStart(2,'0')}</b>${a}</span>`).join('')}</div></section><div class="detail-actions"><button class="primary-button detail-plan" data-plan="${d.id}">Plan ${d.name} <span>→</span></button><button class="detail-wishlist" data-open-wishlist type="button">♡ Go to wishlist</button><a class="detail-map-secondary" href="https://www.google.com/maps/search/?api=1&query=${mapQuery}" target="_blank" rel="noopener noreferrer">View location <span>↗</span></a></div></article>`;$('#destinationModal').classList.add('open');$('#destinationModal').setAttribute('aria-hidden','false')}
 function closeModals(){document.querySelectorAll('.modal').forEach(m=>{m.classList.remove('open');m.setAttribute('aria-hidden','true')})}
@@ -118,7 +125,7 @@ function openAuth(){if(session){const popover=$('#accountPopover'),isOpen=!popov
 function signOut(){localStorage.removeItem('yatraSmartSession');session=null;$('#accountPopover').hidden=true;updateAuthUI();showToast('Signed out.')}
 function renderAuthMode(){const register=authMode==='register';$('#authForm').classList.toggle('register',register);$('#authKicker').textContent=register?'START YOUR JOURNEY':'WELCOME BACK';$('#authTitle').textContent=register?'Create account':'Sign in';$('#authSubtitle').textContent=register?'Create an account to save plans to PostgreSQL.':'Sign in to save trips to your account.';$('#authSubmit').innerHTML=`${register?'Create account':'Sign in'} <span>→</span>`;$('#authSwitch').textContent=register?'Already have an account? Sign in':'New here? Create an account';$('#authPassword').autocomplete=register?'new-password':'current-password';$('#authName').required=register}
 async function authenticate(event){event.preventDefault();const name=$('#authName').value.trim(),email=$('#authEmail').value.trim(),password=$('#authPassword').value;const endpoint=authMode==='register'?'/auth/register':'/auth/login';const payload=authMode==='register'?{name,email,password}:{email,password};try{const response=await fetch(`${API_BASE_URL}${endpoint}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),data=await response.json();if(!response.ok)throw new Error(data.error?.message||'Unable to sign in.');session={token:data.token,user:data.user};localStorage.setItem('yatraSmartSession',JSON.stringify(session));updateAuthUI();closeModals();event.target.reset();showToast(`Welcome, ${data.user.name}. Your account is connected.`)}catch(error){showToast(error.message)}}
-async function recommend(event){event.preventDefault();const d=destination($('#tripDestination').value),start=new Date($('#startDate').value),end=new Date($('#endDate').value),travellers=Number($('#travellers').value),budget=Number($('#tripBudget').value);if(!d||Number.isNaN(start)||Number.isNaN(end)||end<start){showToast('Choose valid start and end dates.');return}const days=Math.floor((end-start)/86400000)+1,interests=[...document.querySelectorAll('.interest-options input:checked')].map(x=>x.value),daily=budget/(days*travellers);const ranked=destinations.map(x=>({d:x,score:x.interests.filter(i=>interests.includes(i)).length*3+(x.cost<=daily?2:0)+(x.id===d.id?2:0)})).sort((a,b)=>b.score-a.score).slice(0,3),estimate=Math.round(d.cost*days*travellers);$('#recommendationBox').innerHTML=`<div class="recommendation-list">${ranked.map(({d:x})=>`<article><p class="match">${x.id===d.id?'Your selected destination':'Good alternative'}</p><h3>${x.name}</h3><p>${x.interests.filter(i=>interests.includes(i)).length?`Matches ${x.interests.filter(i=>interests.includes(i)).join(' and ')}`:'Fits your travel budget'}.</p><p><strong>${money(x.cost)}/day</strong> · ★ ${x.rating}</p></article>`).join('')}</div>`;location.hash='recommendations';if(!session){showToast(`Estimate: ${money(estimate)}. Sign in to save this trip.`);return}try{const savedRouteStopIds=[...new Set([d.id,...routeStopIds])];const response=await fetch(`${API_BASE_URL}/trips`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.token}`},body:JSON.stringify({destinationId:d.id,title:`My ${d.name} Adventure`,startDate:$('#startDate').value,endDate:$('#endDate').value,travelers:travellers,budget,travelStyle:$('#tripStyle').value,routeStopIds:savedRouteStopIds})}),data=await response.json();if(!response.ok)throw new Error(data.error?.message||'Trip could not be saved.');showToast(`Trip saved: ${data.title}.`)}catch(error){showToast(error.message)}}
+async function recommend(event){event.preventDefault();const d=destination($('#tripDestination').value),start=new Date($('#startDate').value),end=new Date($('#endDate').value),travellers=Number($('#travellers').value),budget=Number($('#tripBudget').value);if(!d||Number.isNaN(start)||Number.isNaN(end)||end<start){showToast('Choose valid start and end dates.');return}const days=Math.floor((end-start)/86400000)+1,interests=[...document.querySelectorAll('.interest-options input:checked')].map(x=>x.value),daily=budget/(days*travellers);const ranked=destinations.map(x=>({d:x,score:x.interests.filter(i=>interests.includes(i)).length*3+(x.cost<=daily?2:0)+(x.id===d.id?2:0)})).sort((a,b)=>b.score-a.score).slice(0,3),estimate=Math.round(d.cost*days*travellers);$('#recommendationBox').innerHTML=`<div class="recommendation-list">${ranked.map(({d:x})=>`<article><p class="match">${x.id===d.id?'Your selected destination':'Good alternative'}</p><h3>${x.name}</h3><p>${x.interests.filter(i=>interests.includes(i)).length?`Matches ${x.interests.filter(i=>interests.includes(i)).join(' and ')}`:'Fits your travel budget'}.</p><p><strong>${money(x.cost)}/day</strong> · ★ ${x.rating}</p></article>`).join('')}</div>`;location.hash='recommendations';if(!session){showToast(`Estimate: ${money(estimate)}. Sign in to save this trip.`);return}try{const savedRouteStopIds=[...new Set([d.id,...routeStopIds])];const response=await fetch(`${API_BASE_URL}/trips`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.token}`},body:JSON.stringify({destinationId:d.id,title:`My ${d.name} Adventure`,startDate:$('#startDate').value,endDate:$('#endDate').value,travelers:travellers,budget,travelStyle:$('#tripStyle').value,routeStopIds:savedRouteStopIds})}),data=await response.json();if(!response.ok)throw new Error(data.error?.message||'Trip could not be saved.');currentTripId=data.id;localStorage.setItem('smartYatraCurrentTrip',currentTripId);showToast(`Trip saved: ${data.title}.`)}catch(error){showToast(error.message)}}
 $('#authButton').addEventListener('click',openAuth);$('#authSwitch').addEventListener('click',()=>{authMode=authMode==='login'?'register':'login';renderAuthMode()});$('#authForm').addEventListener('submit',authenticate);updateAuthUI();renderAuthMode();
 
 // Keep the calculated total visible in the page, rather than only in the toast message.
@@ -136,7 +143,7 @@ function showEstimateSummary(){
   const result=document.createElement('article');
   result.className='estimate-summary';
   result.innerHTML=`<p class="match">YOUR TRIP ESTIMATE</p><h3>${selected.name} · ${days} day${days===1?'':'s'}</h3><div class="estimate-amount">${money(estimatedTotal)}</div><p>${travellers} traveller${travellers===1?'':'s'} × ${money(selected.cost)}/day</p><p class="estimate-status ${difference>=0?'on-budget':'over-budget'}">${status}</p>`;
-  result.insertAdjacentHTML('beforeend','<button class="save-trip-button" data-save-trip type="button">Save Trip <span>→</span></button>');
+  result.insertAdjacentHTML('beforeend','<button class="save-trip-button" data-build-itinerary type="button">Build your itinerary <span>→</span></button><button class="save-trip-button" data-save-trip type="button">Save Trip <span>→</span></button>');
   $('#recommendationBox').prepend(result);
 }
 
@@ -172,6 +179,8 @@ function saveCurrentTrip(){
 }
 
 document.addEventListener('click',event=>{
+  const buildItinerary=event.target.closest('[data-build-itinerary]');
+  if(buildItinerary){const selected=destination($('#tripDestination').value);if(selected){if(!routeStopIds.includes(selected.id))routeStopIds.unshift(selected.id);setActiveRouteStop(selected.id);renderTravelAssistant()}location.hash='travel-assistant';return;}
   const saveButton=event.target.closest('[data-save-trip]');
   if(saveButton){saveCurrentTrip();return;}
   const suggestion=event.target.closest('#recommendationBox .recommendation-list article');
@@ -180,13 +189,27 @@ document.addEventListener('click',event=>{
 
 $('#tripForm').addEventListener('submit',showEstimateSummary);
 
+async function ensureCurrentTrip(){
+  if(currentTripId)return currentTripId;
+  const selected=activeRoutePlace()||destination($('#tripDestination').value);
+  if(!selected)throw new Error('Choose a destination before requesting a cab.');
+  const response=await fetch(`${API_BASE_URL}/trips`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.token}`},body:JSON.stringify({destinationId:selected.id,title:`My ${selected.name} Adventure`,startDate:$('#startDate').value,endDate:$('#endDate').value,travelers:Number($('#travellers').value)||1,budget:Number($('#tripBudget').value)||0,travelStyle:$('#tripStyle').value,routeStopIds:[...new Set([selected.id,...routeStopIds]) ]})});
+  const trip=await response.json();
+  if(!response.ok)throw new Error(trip.error?.message||'Trip could not be saved.');
+  currentTripId=trip.id;
+  localStorage.setItem('smartYatraCurrentTrip',currentTripId);
+  return currentTripId;
+}
 async function createVehicleBooking(providerId, providerName){
   if(!session){showToast('Sign in to send a vehicle booking request.');openAuth();return}
   try{
-    const response=await fetch(`${API_BASE_URL}/bookings`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.token}`},body:JSON.stringify({providerId,startDate:$('#startDate').value,endDate:$('#endDate').value,guests:Number($('#travellers').value)||1,note:`Vehicle request for ${providerName}`})});
+    const tripId=await ensureCurrentTrip();
+    const response=await fetch(`${API_BASE_URL}/bookings`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.token}`},body:JSON.stringify({providerId,tripId,startDate:$('#startDate').value,endDate:$('#endDate').value,guests:Number($('#travellers').value)||1,note:`Vehicle request for ${providerName}`})});
     const data=await response.json();
     if(!response.ok)throw new Error(data.error?.message||'Booking request could not be saved.');
-    showToast(`${providerName} request saved. A provider confirmation is still required.`);
+    location.hash='my-trips';
+    await loadMyTrips();
+    showToast(`${providerName} request and your trip are saved in My trips.`);
   }catch(error){showToast(error.message)}
 }
 async function recordEmergencyAlert(position){
@@ -204,7 +227,10 @@ document.addEventListener('click',event=>{
   const addButton=event.target.closest('[data-add-route]');
   if(addButton){addRouteStop($('#routeDestinationSelect').value);return}
   const removeButton=event.target.closest('[data-remove-route]');
-  if(removeButton){routeStopIds=routeStopIds.filter(id=>id!==removeButton.dataset.removeRoute);renderTravelAssistant();return}
+  if(removeButton){const removed=removeButton.dataset.removeRoute;routeStopIds=routeStopIds.filter(id=>id!==removed);if(activeRouteStopId===removed)setActiveRouteStop(routeStopIds[0]||'');renderTravelAssistant();return}
+  const activeStop=event.target.closest('[data-route-active]');
+  if(activeStop){setActiveRouteStop(activeStop.dataset.routeActive);renderTravelAssistant();return}
+  if(event.target.closest('[data-clear-route]')){routeStopIds=[];setActiveRouteStop('');renderTravelAssistant();showToast('Your city-day route has been cleared.');return}
   if(event.target.closest('[data-optimize-route]')){optimiseRoute();return}
   const vehicle=event.target.closest('[data-vehicle]');
   if(vehicle){const providerId=vehicle.dataset.providerId;if(providerId)createVehicleBooking(providerId,vehicle.dataset.vehicle);else showToast(`${vehicle.dataset.vehicle} is available as a planning preference.`);return}
@@ -216,7 +242,7 @@ function tripDate(value){return new Intl.DateTimeFormat('en-IN',{day:'numeric',m
 function renderLocalTrips(container){
   const saved=JSON.parse(localStorage.getItem('smartYatraSavedTrips')||'[]');
   if(!saved.length){container.innerHTML='<p class="empty">Every great journey begins with a plan. Your saved adventures will be ready here when you are.</p>';return}
-  container.innerHTML=`<div class="trip-grid">${saved.map(trip=>`<article class="trip-card"><p class="match">SAVED PLAN</p><h3>${escapeHtml(trip.destinationName)}</h3><p class="trip-title">${escapeHtml(trip.title)}</p><div class="trip-dates">${tripDate(trip.startDate)} - ${tripDate(trip.endDate)}</div><dl><div><dt>Travellers</dt><dd>${trip.travelers}</dd></div><div><dt>Budget</dt><dd>${money(trip.budget)}</dd></div><div><dt>Style</dt><dd>${escapeHtml(trip.travelStyle)}</dd></div></dl></article>`).join('')}</div>`;
+  container.innerHTML=`<div class="trip-grid">${saved.map(trip=>`<article class="trip-card"><p class="match">SAVED PLAN</p><h3>${escapeHtml(trip.destinationName)}</h3><p class="trip-title">${escapeHtml(trip.title)}</p><div class="trip-dates">${tripDate(trip.startDate)} - ${tripDate(trip.endDate)}</div><dl><div><dt>Travellers</dt><dd>${trip.travelers}</dd></div><div><dt>Budget</dt><dd>${money(trip.budget)}</dd></div><div><dt>Style</dt><dd>${escapeHtml(trip.travelStyle)}</dd></div></dl><button class="trip-delete-button" data-delete-local-trip="${trip.id}" type="button">Delete trip</button></article>`).join('')}</div>`;
 }
 async function loadMyTrips(){
   const container=$('#tripsContent');
@@ -229,9 +255,27 @@ async function loadMyTrips(){
     if(response.status===401){localStorage.removeItem('yatraSmartSession');session=null;$('#authButton').textContent='Sign in';container.innerHTML='<p class="empty">Your session has expired. Please sign in again.</p>';return}
     if(!response.ok)throw new Error(data.error?.message||'Trips could not be loaded.');
     if(!data.length){container.innerHTML='<p class="empty">No saved trips yet. Create an estimate above to save your first trip.</p>';return}
-    container.innerHTML=`<div class="trip-grid">${data.map(trip=>`<article class="trip-card"><p class="match">${escapeHtml(trip.status||'PLANNING')}</p><h3>${escapeHtml(trip.destination?.name||trip.title)}</h3><p class="trip-title">${escapeHtml(trip.title)}</p><div class="trip-dates">${tripDate(trip.startDate)} - ${tripDate(trip.endDate)}</div><dl><div><dt>Travellers</dt><dd>${Number(trip.travelers)||1}</dd></div><div><dt>Budget</dt><dd>${money(Number(trip.budget))}</dd></div><div><dt>Style</dt><dd>${escapeHtml(trip.travelStyle||'Flexible')}</dd></div></dl></article>`).join('')}</div>`;
+    container.innerHTML=`<div class="trip-grid">${data.map(trip=>`<article class="trip-card"><p class="match">${escapeHtml(trip.status||'PLANNING')}</p><h3>${escapeHtml(trip.destination?.name||trip.title)}</h3><p class="trip-title">${escapeHtml(trip.title)}</p><div class="trip-dates">${tripDate(trip.startDate)} - ${tripDate(trip.endDate)}</div><dl><div><dt>Travellers</dt><dd>${Number(trip.travelers)||1}</dd></div><div><dt>Budget</dt><dd>${money(Number(trip.budget))}</dd></div><div><dt>Style</dt><dd>${escapeHtml(trip.travelStyle||'Flexible')}</dd></div></dl><button class="trip-delete-button" data-delete-trip="${trip.id}" type="button">Delete trip</button></article>`).join('')}</div>`;
   }catch(error){renderLocalTrips(container)}
 }
+
+async function deleteTrip(id){
+  if(!session)return;
+  try{
+    const response=await fetch(`${API_BASE_URL}/trips/${encodeURIComponent(id)}`,{method:'DELETE',headers:{Authorization:`Bearer ${session.token}`}});
+    if(!response.ok){const data=await response.json();throw new Error(data.error?.message||'Trip could not be deleted.');}
+    if(currentTripId===id){currentTripId='';localStorage.removeItem('smartYatraCurrentTrip');}
+    await loadMyTrips();
+    showToast('Trip deleted from My trips.');
+  }catch(error){showToast(error.message)}
+}
+
+document.addEventListener('click',event=>{
+  const remoteDelete=event.target.closest('[data-delete-trip]');
+  if(remoteDelete){deleteTrip(remoteDelete.dataset.deleteTrip);return}
+  const localDelete=event.target.closest('[data-delete-local-trip]');
+  if(localDelete){const saved=JSON.parse(localStorage.getItem('smartYatraSavedTrips')||'[]').filter(trip=>String(trip.id)!==localDelete.dataset.deleteLocalTrip);localStorage.setItem('smartYatraSavedTrips',JSON.stringify(saved));renderLocalTrips($('#tripsContent'));showToast('Trip deleted from this device.');}
+});
 
 $('#refreshTrips').addEventListener('click',loadMyTrips);
 $('#tripForm').addEventListener('submit',()=>setTimeout(loadMyTrips,1200));

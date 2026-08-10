@@ -88,6 +88,16 @@ app.get('/api/trips', requireAuth, async (req: AuthRequest, res, next) => {
   try { const trips = await prisma.trip.findMany({ where: { userId: req.user!.id }, include: { destination: true, itineraryDays: { include: { items: true }, orderBy: { dayNumber: 'asc' } }, budgetItems: true }, orderBy: { startDate: 'asc' } }); res.json(trips); } catch (error) { next(error); }
 });
 
+app.delete('/api/trips/:tripId', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const tripId = req.params.tripId;
+    if (typeof tripId !== 'string') return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'A valid trip is required.' } });
+    const deleted = await prisma.trip.deleteMany({ where: { id: tripId, userId: req.user!.id } });
+    if (!deleted.count) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Trip was not found.' } });
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
 app.get('/api/wishlist', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const wishlist = await prisma.wishlist.findMany({
