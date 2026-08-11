@@ -25,6 +25,12 @@ const conciseSummary = (text: string) => {
   const summary = (sentences.slice(0, 2).join(' ') || text).trim();
   return summary.length > 300 ? `${summary.slice(0, 297).trimEnd()}…` : summary;
 };
+const localGuideCache = new Map<string, { expiresAt: number; data: unknown }>();
+const mapHeaders = { accept: 'application/json', 'user-agent': 'SmartYatra course project local-guide/1.0' };
+const mapPlace = (element: { id: number; type: string; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }) => {
+  const latitude = element.lat ?? element.center?.lat, longitude = element.lon ?? element.center?.lon, tags = element.tags ?? {};
+  return { id: `${element.type}/${element.id}`, name: tags.name ?? tags.brand ?? 'Unnamed mapped place', type: tags.tourism ?? tags.amenity ?? 'local place', mapsUrl: latitude !== undefined && longitude !== undefined ? `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}` : null };
+};
 
 function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
@@ -71,6 +77,41 @@ app.get('/api/destinations', async (req, res, next) => {
       orderBy: [{ rating: 'desc' }, { name: 'asc' }]
     });
     res.json(destinations.map(toDestination));
+  } catch (error) { next(error); }
+});
+
+app.get('/api/destinations/:slug/local-guide', async (req, res, next) => {
+  try {
+    const destination = await prisma.destination.findFirst({ where: { slug: req.params.slug, status: ContentStatus.PUBLISHED }, select: { id: true, name: true, city: true, state: true, latitude: true, longitude: true } });
+    if (!destination) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Destination was not found.' } });
+    const cached = localGuideCache.get(destination.id);
+    if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
+
+    let latitude = destination.latitude === null ? null : Number(destination.latitude), longitude = destination.longitude === null ? null : Number(destination.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      const geocoding = new URL('https://nominatim.openstreetmap.org/search');
+      geocoding.search = new URLSearchParams({ q: `${destination.city}, ${destination.state}, India`, format: 'jsonv2', limit: '1' }).toString();
+      const geocodeResponse = await fetch(geocoding, { headers: mapHeaders });
+      const geocoded = geocodeResponse.ok ? await geocodeResponse.json() as Array<{ lat: string; lon: string }> : [];
+      latitude = geocoded[0] ? Number(geocoded[0].lat) : null;
+      longitude = geocoded[0] ? Number(geocoded[0].lon) : null;
+      if (Number.isFinite(latitude) && Number.isFinite(longitude)) await prisma.destination.update({ where: { id: destination.id }, data: { latitude, longitude } });
+    }
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return res.json({ source: 'OpenStreetMap', hotels: [], dining: [], transport: [], note: 'A precise map location is not available for this destination yet.' });
+
+    const overpassQuery = `[out:json][timeout:20];(nwr["tourism"~"hotel|guest_house|hostel"](around:10000,${latitude},${longitude});nwr["amenity"~"restaurant|cafe"](around:8000,${latitude},${longitude});nwr["amenity"~"taxi|bus_station|ferry_terminal"](around:12000,${latitude},${longitude}););out center 160;`;
+    const overpassResponse = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', headers: { ...mapHeaders, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ data: overpassQuery }) });
+    const overpassData = overpassResponse.ok ? await overpassResponse.json() as { elements?: Array<{ id: number; type: string; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }> } : {};
+    const entries = (overpassData.elements ?? []).map(mapPlace).filter(place => place.name !== 'Unnamed mapped place');
+    const guide = {
+      source: 'OpenStreetMap',
+      hotels: entries.filter(place => ['hotel', 'guest_house', 'hostel'].includes(place.type)).slice(0, 3),
+      dining: entries.filter(place => ['restaurant', 'cafe'].includes(place.type)).slice(0, 3),
+      transport: entries.filter(place => ['taxi', 'bus_station', 'ferry_terminal'].includes(place.type)).slice(0, 3),
+      note: 'Named places are map listings; confirm availability, price, and opening hours directly with the provider.'
+    };
+    localGuideCache.set(destination.id, { expiresAt: Date.now() + 6 * 60 * 60 * 1000, data: guide });
+    res.json(guide);
   } catch (error) { next(error); }
 });
 

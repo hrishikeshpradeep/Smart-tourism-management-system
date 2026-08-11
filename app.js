@@ -117,6 +117,15 @@ async function loadTravelServices(place){
   const key=routeKey(place),services=$('#localServices'),request=++serviceRequestToken;
   if(!key||!services)return;
   try{
+    const guideResponse=await fetch(`${API_BASE_URL}/destinations/${encodeURIComponent(key)}/local-guide`);
+    const guide=guideResponse.ok?await guideResponse.json():null;
+    if(request!==serviceRequestToken||routeKey(activeRoutePlace())!==key)return;
+    const mapName=entry=>entry.mapsUrl?`<a href="${entry.mapsUrl}" target="_blank" rel="noopener noreferrer">${entry.name} <span aria-hidden="true">↗</span></a>`:entry.name;
+    if(guide){
+      const group=(label,items,empty)=>`<div class="service-group"><span>${label}</span>${items.length?items.map(item=>`<strong class="mapped-place">${mapName(item)}</strong>`).join(''):`<small>${empty}</small>`}</div>`;
+      services.innerHTML=`${group(`STAY NEAR ${place.name}`,guide.hotels,'No named accommodation was found in the current map data.')} ${group('LOCAL DINING',guide.dining,'No named dining listing was found in the current map data.')}<div class="vehicle-options"><p>LOCAL TRANSPORT</p>${guide.transport.length?guide.transport.map(vehicle=>`<button data-vehicle="${vehicle.name}" type="button"><span>${vehicle.name}</span><b>Plan transport</b></button>`).join(''):'<small>No named transport point was found in the current map data.</small>'}<small class="map-data-note">${guide.note||'Confirm current availability and fares directly with the provider.'}</small></div>`;
+      return;
+    }
     const response=await fetch(`${API_BASE_URL}/destinations/${encodeURIComponent(key)}/services`);
     if(!response.ok)throw new Error('Services unavailable');
     const providers=await response.json();
