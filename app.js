@@ -48,6 +48,11 @@ function destinationCard(d){const discovered=Boolean(d.isDiscovery),costLabel=di
 function scheduleDiscovery(query){if(query===discoveryQuery)return;discoveryQuery=query;discoveryResult=null;discoveryError='';clearTimeout(discoveryTimer);const request=++discoveryRequest;if(query.length<3)return;discoveryTimer=setTimeout(async()=>{discoveryLoading=true;renderDestinations();try{const response=await fetch(`${API_BASE_URL}/discover?q=${encodeURIComponent(query)}`),data=await response.json();if(!response.ok)throw new Error(data.error?.message||'No destination details were found.');if(request!==discoveryRequest||$('#searchInput').value.trim()!==query)return;discoveryResult={...data,interests:['nature','culture','food']};}catch(error){if(request===discoveryRequest)discoveryError=error.message;}finally{if(request===discoveryRequest){discoveryLoading=false;renderDestinations();}}},350)}
 function renderDestinations(){const query=$('#searchInput').value.trim(),items=destinations.filter(matches);if(!items.length&&query.length>=3)scheduleDiscovery(query);const discovered=discoveryResult&&discoveryQuery===query&&matches(discoveryResult)?[discoveryResult]:[],visible=items.length?items:discovered;$('#resultsCount').textContent=visible.length?`${visible.length} ${visible.length===1?'destination':'destinations'} found`:(discoveryLoading?'Finding destination details…':'0 destinations found');grid.innerHTML=visible.length?visible.map(destinationCard).join(''):(discoveryLoading?'<p class="empty">SmartYatra is preparing a destination discovery card…</p>':discoveryError?`<p class="empty">${escapeHtml(discoveryError)}</p>`:'<p class="empty">No destination matches yet. Keep typing to let SmartYatra discover it for you.</p>')}
 function destination(id){return allDestinations().find(d=>d.id===id)}
+function addDiscoveredDestinationToPlanner(place){
+  if(!place?.isDiscovery)return;
+  const select=$('#tripDestination');
+  if(![...select.options].some(option=>option.value===place.id))select.insertAdjacentHTML('beforeend',`<option value="${place.id}">${formatDestinationOption(place)} · Discovery</option>`);
+}
 let routeStopIds=JSON.parse(localStorage.getItem('smartYatraRouteStops')||'[]');
 let activeRouteStopId=localStorage.getItem('smartYatraActiveRouteStop')||'';
 let currentTripId=localStorage.getItem('smartYatraCurrentTrip')||'';
@@ -59,7 +64,9 @@ function activeRoutePlace(){const places=routeStopIds.map(destination).filter(Bo
 function renderTravelAssistant(){
   const picker=$('#routeDestinationSelect'),stops=$('#routeStops'),crowd=$('#crowdInsights'),services=$('#localServices');
   if(!picker||!stops||!crowd||!services)return;
-  picker.innerHTML=destinations.map(d=>`<option value="${d.id}">${formatDestinationOption(d)}</option>`).join('');
+  const pickerValue=picker.value;
+  picker.innerHTML=allDestinations().map(d=>`<option value="${d.id}">${formatDestinationOption(d)}${d.isDiscovery?' · Discovery':''}</option>`).join('');
+  if([...picker.options].some(option=>option.value===pickerValue))picker.value=pickerValue;
   routeStopIds=routeStopIds.filter(id=>destination(id));
   const places=routeStopIds.map(destination).filter(Boolean);
   if(places.length&&!places.some(place=>place.id===activeRouteStopId))setActiveRouteStop(places[0].id);
@@ -87,12 +94,26 @@ async function loadTravelServices(place){
   }catch{ /* The card keeps its useful local planning fallback until the API is reachable. */ }
 }
 function addRouteStop(id){if(!destination(id))return;if(routeStopIds.includes(id)){setActiveRouteStop(id);renderTravelAssistant();showToast(`${destination(id).name} is already in your route.`);return}routeStopIds.push(id);setActiveRouteStop(id);renderTravelAssistant();showToast(`${destination(id).name} added to your route.`)}
+async function discoverRouteStop(){
+  const input=$('#routeDiscoveryInput'),query=input?.value.trim();
+  if(!query||query.length<3){showToast('Type at least three letters to discover a destination.');return}
+  try{
+    const response=await fetch(`${API_BASE_URL}/discover?q=${encodeURIComponent(query)}`),place=await response.json();
+    if(!response.ok)throw new Error(place.error?.message||'Destination details could not be found.');
+    discoveryResult={...place,interests:['nature','culture','food']};
+    discoveryQuery=query;
+    addDiscoveredDestinationToPlanner(discoveryResult);
+    addRouteStop(discoveryResult.id);
+    input.value='';
+    showToast(`${discoveryResult.name} was discovered and added to your route.`);
+  }catch(error){showToast(error.message)}
+}
 function optimiseRoute(){if(routeStopIds.length<2){showToast('Add at least two places to optimise your route.');return}routeStopIds.sort((a,b)=>{const order={heritage:1,food:2,beach:3,mountain:4,wildlife:5,adventure:6};return (order[destination(a)?.style]||9)-(order[destination(b)?.style]||9)});renderTravelAssistant();showToast('Your route is organised for a smoother day of travel.');}
 function openModal(id){const d=destination(id),[primary,accent,soft]=destinationPalettes[d.slug||d.id]||destinationPalettes.goa,mapQuery=encodeURIComponent(`${d.name}, ${d.region}, India`);$('#modalContent').innerHTML=`<article class="destination-detail" style="--place-primary:${primary};--place-accent:${accent};--place-soft:${soft}"><header class="detail-heading"><div><p class="detail-kicker">CURATED ESCAPE</p><h2>${d.name}</h2><p class="detail-location">${d.region} <span>•</span> ★ ${d.rating} traveller rating</p></div><a class="map-link" href="https://www.google.com/maps/search/?api=1&query=${mapQuery}" target="_blank" rel="noopener noreferrer" aria-label="Open ${d.name} in Google Maps"><span aria-hidden="true">⌖</span> Open in Maps</a></header><div class="place-image-frame"><img class="detail-hero" src="${d.image}" alt="${d.name}, ${d.region}"><span class="place-image-caption">${d.style} escape</span></div><p class="detail-summary">${d.summary}</p><div class="detail-cubes"><div class="detail-cube"><span class="cube-icon">₹</span><small>Daily budget</small><strong>${money(d.cost)}</strong><em>per traveller</em></div><div class="detail-cube"><span class="cube-icon">☀</span><small>Ideal season</small><strong>${d.best}</strong><em>best weather window</em></div></div><section class="experiences"><p class="detail-kicker">MAKE IT YOURS</p><h3>Suggested experiences</h3><div class="experience-list">${d.attractions.map((a,index)=>`<span><b>${String(index+1).padStart(2,'0')}</b>${a}</span>`).join('')}</div></section><div class="detail-actions"><button class="primary-button detail-plan" data-plan="${d.id}">Plan ${d.name} <span>→</span></button><button class="detail-wishlist" data-open-wishlist type="button">♡ Go to wishlist</button><a class="detail-map-secondary" href="https://www.google.com/maps/search/?api=1&query=${mapQuery}" target="_blank" rel="noopener noreferrer">View location <span>↗</span></a></div></article>`;$('#destinationModal').classList.add('open');$('#destinationModal').setAttribute('aria-hidden','false')}
 function closeModals(){document.querySelectorAll('.modal').forEach(m=>{m.classList.remove('open');m.setAttribute('aria-hidden','true')})}
 function renderWishlist(){const items=wishlist.map(destination).filter(Boolean);$('#wishlistContent').innerHTML=items.length?items.map(d=>`<article class="wishlist-row"><img src="${d.image}" alt="${d.name}, ${d.region}"><div class="wishlist-place"><p>${d.region}</p><strong>${d.name}</strong><span>★ ${d.rating} · from ${money(d.cost)}/day</span></div><div class="wishlist-actions"><button class="wishlist-plan" data-plan="${d.id}">Plan trip <span>→</span></button><button class="wishlist-remove" data-save="${d.id}" aria-label="Remove ${d.name} from saved places">Remove</button></div></article>`).join(''):'<div class="wishlist-empty"><span>♡</span><h3>Your shortlist is waiting</h3><p>Save a destination you love and it will appear here for your next plan.</p><a href="#explore" data-close-modal>Explore destinations <b>→</b></a></div>'}
 function openWishlist(){closeModals();renderWishlist();$('#wishlistModal').classList.add('open');$('#wishlistModal').setAttribute('aria-hidden','false')}
-function planFor(id){const selected=destination(id);$('#tripDestination').value=id;setPlannerDestinationTheme(selected);renderTravelAssistant();closeModals();location.hash='planner';showToast(`${selected.name} added to your trip form`) }
+function planFor(id){const selected=destination(id);if(!selected)return;addDiscoveredDestinationToPlanner(selected);$('#tripDestination').value=id;setPlannerDestinationTheme(selected);if(!routeStopIds.includes(id))routeStopIds.unshift(id);setActiveRouteStop(id);renderTravelAssistant();closeModals();location.hash='planner';showToast(`${selected.name} added to your trip form`) }
 function recommendDemo(event){event.preventDefault();const d=destination($('#tripDestination').value),start=new Date($('#startDate').value),end=new Date($('#endDate').value),travellers=Number($('#travellers').value),budget=Number($('#tripBudget').value);if(!d||Number.isNaN(start)||Number.isNaN(end)||end<start){showToast('Choose valid start and end dates.');return}const days=Math.floor((end-start)/86400000)+1,interests=[...document.querySelectorAll('.interest-options input:checked')].map(x=>x.value),daily=budget/(days*travellers);const ranked=destinations.map(x=>({d:x,score:x.interests.filter(i=>interests.includes(i)).length*3+(x.cost<=daily?2:0)+(x.id===d.id?2:0)})).sort((a,b)=>b.score-a.score).slice(0,3);const estimate=Math.round(d.cost*days*travellers);$('#recommendationBox').innerHTML=`<div class="recommendation-list">${ranked.map(({d:x})=>`<article><p class="match">${x.id===d.id?'Your selected destination':'Good alternative'}</p><h3>${x.name}</h3><p>${x.interests.filter(i=>interests.includes(i)).length?`Matches ${x.interests.filter(i=>interests.includes(i)).join(' and ')}`:'Fits your travel budget'}.</p><p><strong>${money(x.cost)}/day</strong> · ★ ${x.rating}</p></article>`).join('')}</div>`;const budgetStatus=estimate<=budget?`within your ₹${budget.toLocaleString('en-IN')} target`:`about ₹${(estimate-budget).toLocaleString('en-IN')} over your target`;showToast(`${days}-day estimate for ${travellers}: ${money(estimate)} — ${budgetStatus}.`);location.hash='recommendations'}
 
 function getCleanRegion(city,state,name){
@@ -230,6 +251,7 @@ async function recordEmergencyAlert(position){
 document.addEventListener('click',event=>{
   const addButton=event.target.closest('[data-add-route]');
   if(addButton){addRouteStop($('#routeDestinationSelect').value);return}
+  if(event.target.closest('[data-discover-route]')){discoverRouteStop();return}
   const removeButton=event.target.closest('[data-remove-route]');
   if(removeButton){const removed=removeButton.dataset.removeRoute;routeStopIds=routeStopIds.filter(id=>id!==removed);if(activeRouteStopId===removed)setActiveRouteStop(routeStopIds[0]||'');renderTravelAssistant();return}
   const activeStop=event.target.closest('[data-route-active]');
@@ -240,6 +262,8 @@ document.addEventListener('click',event=>{
   if(vehicle){const providerId=vehicle.dataset.providerId;if(providerId)createVehicleBooking(providerId,vehicle.dataset.vehicle);else showToast(`${vehicle.dataset.vehicle} is available as a planning preference.`);return}
   if(event.target.closest('[data-share-location]')){const status=$('#sosStatus');if(!navigator.geolocation){status.textContent='Location sharing is not available in this browser.';return}status.textContent='Getting your location…';navigator.geolocation.getCurrentPosition(position=>{recordEmergencyAlert(position);showToast('Your location is ready to share.');},()=>{status.textContent='Location permission was not granted. Call 112 if help is urgent.'});}
 });
+
+$('#routeDiscoveryInput')?.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();discoverRouteStop();}});
 
 function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]))}
 function tripDate(value){return new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value))}
@@ -352,6 +376,9 @@ function setPlannerDestinationTheme(place){
   planner.style.setProperty('--planner-soft',soft);
   $('#plannerTitle').textContent=`Build a practical itinerary for ${place.name}.`;
   $('#plannerSubtitle').textContent=plannerCopyByDestination[place.slug||place.id]||'Shape each day around the moments that make this place unforgettable.';
+  planner.classList.toggle('planner-discovery',Boolean(place.isDiscovery));
+  if(place.isDiscovery){planner.style.setProperty('--planner-discovery-image',`linear-gradient(90deg,rgba(4,18,22,.52),rgba(4,18,22,.22)),url("${place.image}")`);return;}
+  planner.style.removeProperty('--planner-discovery-image');
   plannerVideoController?.setPlace(place.slug||place.id);
 }
 function startPlannerVideoFlow(){
