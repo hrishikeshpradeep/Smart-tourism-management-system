@@ -19,6 +19,12 @@ type AuthRequest = Request & { user?: { id: string; role: Role } };
 const signToken = (id: string, role: Role) => jwt.sign({ sub: id, role }, secret, { expiresIn: '7d' });
 const toDestination = (d: any) => ({ ...d, dailyCost: Number(d.dailyCost), rating: Number(d.rating), attractions: d.attractions?.map((a: any) => ({ ...a, entryFee: Number(a.entryFee) })) });
 const discoveryCategory = (text: string) => /\b(beach|island|coast|sea|ocean)\b/i.test(text) ? 'beach' : /\b(mountain|hill|himalaya|valley|peak)\b/i.test(text) ? 'mountain' : /\b(wildlife|forest|national park|sanctuary)\b/i.test(text) ? 'wildlife' : /\b(fort|temple|palace|heritage|monument|museum)\b/i.test(text) ? 'heritage' : 'city';
+const discoveryBudget = (category: string) => ({ beach: 5200, mountain: 4000, wildlife: 4400, heritage: 3400, adventure: 4600, city: 3800 }[category] ?? 3800);
+const conciseSummary = (text: string) => {
+  const sentences = text.match(/[^.!?]+[.!?]+/g)?.map(sentence => sentence.trim()).filter(Boolean) ?? [];
+  const summary = (sentences.slice(0, 2).join(' ') || text).trim();
+  return summary.length > 300 ? `${summary.slice(0, 297).trimEnd()}…` : summary;
+};
 
 function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
@@ -80,16 +86,17 @@ app.get('/api/discover', async (req, res, next) => {
     const pages = Object.values(result.query?.pages ?? {});
     const page = pages.find(item => item.extract || item.thumbnail?.source);
     if (!page) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No reliable destination details were found. Try a more specific place name.' } });
-    const overview = page.extract?.trim() || `${page.title} is available to explore with local planning research.`;
+    const overview = conciseSummary(page.extract?.trim() || `${page.title} is available to explore with local planning research.`);
+    const category = discoveryCategory(`${page.title} ${overview}`);
     res.json({
       id: `discovery-${page.pageid}`,
       slug: `discovery-${page.pageid}`,
       name: page.title,
       region: 'Destination discovery',
-      style: discoveryCategory(`${page.title} ${overview}`),
+      style: category,
       summary: overview,
       image: page.thumbnail?.source || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1800&q=88',
-      cost: 0,
+      cost: discoveryBudget(category),
       rating: 0,
       best: 'Check local seasonal guidance',
       attractions: ['Local landmarks', 'Regional food', 'Neighbourhood walks'],
@@ -98,6 +105,22 @@ app.get('/api/discover', async (req, res, next) => {
       source: 'Wikipedia',
       isDiscovery: true
     });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/discovered-destinations', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { slug, name, summary, image, style, cost, latitude, longitude } = req.body ?? {};
+    if (typeof slug !== 'string' || !/^discovery-\d+$/.test(slug) || typeof name !== 'string' || !name.trim() || typeof summary !== 'string' || !summary.trim() || typeof image !== 'string' || !image.startsWith('https://') || typeof style !== 'string' || !Number.isFinite(Number(cost))) {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'The discovered destination details are invalid.' } });
+    }
+    const category = ['beach', 'mountain', 'wildlife', 'heritage', 'adventure', 'city'].includes(style) ? style : 'city';
+    const destination = await prisma.destination.upsert({
+      where: { slug },
+      update: { name: name.trim().slice(0, 120), city: name.trim().slice(0, 120), state: 'Discovered destination', category, summary: conciseSummary(summary), dailyCost: Number(cost), imageUrl: image, latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null, longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null, bestSeason: 'Check local seasonal guidance', status: ContentStatus.PUBLISHED },
+      create: { name: name.trim().slice(0, 120), slug, city: name.trim().slice(0, 120), state: 'Discovered destination', category, summary: conciseSummary(summary), dailyCost: Number(cost), imageUrl: image, latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null, longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null, bestSeason: 'Check local seasonal guidance', status: ContentStatus.PUBLISHED }
+    });
+    res.status(201).json(toDestination(destination));
   } catch (error) { next(error); }
 });
 

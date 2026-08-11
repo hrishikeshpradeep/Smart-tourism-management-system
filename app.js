@@ -41,11 +41,16 @@ const grid=$('#destinationGrid'), wishCount=$('#wishCount'), toast=$('#toast');
 function money(n){return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n)}
 function showToast(text){toast.textContent=text;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2600)}
 function saveWishlist(){localStorage.setItem('yatraSmartWishlist',JSON.stringify(wishlist));wishCount.textContent=wishlist.length}
-let discoveryResult=null,discoveryQuery='',discoveryLoading=false,discoveryError='',discoveryTimer=null,discoveryRequest=0;
-function allDestinations(){return discoveryResult?[...destinations,discoveryResult]:destinations}
+let discoveredDestinations=JSON.parse(localStorage.getItem('smartYatraDiscoveredDestinations')||'[]').filter(place=>place&&place.id&&place.isDiscovery),discoveryResult=null,discoveryQuery='',discoveryLoading=false,discoveryError='',discoveryTimer=null,discoveryRequest=0;
+const discoveryBudgetByStyle={beach:5200,mountain:4000,wildlife:4400,heritage:3400,adventure:4600,city:3800};
+const conciseDiscoverySummary=text=>{const sentences=String(text||'').match(/[^.!?]+[.!?]+/g)?.map(sentence=>sentence.trim()).filter(Boolean)??[];const summary=(sentences.slice(0,2).join(' ')||String(text||'')).trim();return summary.length>300?`${summary.slice(0,297).trimEnd()}…`:summary};
+discoveredDestinations=discoveredDestinations.map(place=>({...place,cost:Number(place.cost)||discoveryBudgetByStyle[place.style]||3800,summary:conciseDiscoverySummary(place.summary),best:place.best||'Check local seasonal guidance',attractions:Array.isArray(place.attractions)&&place.attractions.length?place.attractions:['Local landmarks','Regional food','Neighbourhood walks'],interests:place.interests||['nature','culture','food']}));
+function persistDiscoveredDestinations(){localStorage.setItem('smartYatraDiscoveredDestinations',JSON.stringify(discoveredDestinations))}
+function rememberDiscoveredDestination(place){const normalised={...place,isDiscovery:true,cost:Number(place.cost)||discoveryBudgetByStyle[place.style]||3800,summary:conciseDiscoverySummary(place.summary),rating:Number(place.rating)||0,best:place.best||'Check local seasonal guidance',attractions:Array.isArray(place.attractions)&&place.attractions.length?place.attractions:['Local landmarks','Regional food','Neighbourhood walks'],interests:place.interests||['nature','culture','food']};const index=discoveredDestinations.findIndex(item=>item.slug===normalised.slug);if(index>=0)discoveredDestinations[index]=normalised;else discoveredDestinations.push(normalised);discoveryResult=normalised;persistDiscoveredDestinations();return normalised}
+function allDestinations(){return [...destinations,...discoveredDestinations]}
 function matches(d){const q=$('#searchInput').value.toLowerCase().trim(),style=$('#styleFilter').value,budget=$('#budgetFilter').value;const search=!q||[d.name,d.region,d.style,d.summary,...(d.interests||[])].join(' ').toLowerCase().includes(q);const styleOK=style==='all'||d.style===style;const budgetOK=budget==='all'||(budget==='low'&&d.cost<2500)||(budget==='mid'&&d.cost>=2500&&d.cost<=5000)||(budget==='high'&&d.cost>5000);return search&&styleOK&&budgetOK}
 function destinationCard(d){const discovered=Boolean(d.isDiscovery),costLabel=discovered?'Details from a public travel reference':`from ${money(d.cost)}/day`,ratingLabel=discovered?'SmartYatra discovery':'★ '+d.rating;return `<article class="destination-card ${discovered?'discovery-card':''}"><button class="destination-image-button" data-detail="${d.id}" aria-label="View details for ${d.name}"><img src="${d.image}" alt="${d.name}, ${d.region}"><span>Explore ${d.name} <b>↗</b></span></button>${discovered?'':'<button class="save-card" data-save="'+d.id+'" aria-label="Save '+d.name+'">'+(wishlist.includes(d.id)?'♥':'♡')+'</button>'}<div class="card-content"><div class="meta"><span>${d.region}</span><span>${ratingLabel}</span></div><h3>${d.name}</h3><div class="meta"><span>${d.style}</span><span>${costLabel}</span></div><span class="tag">${discovered?'DISCOVERY RESULT · verify local details':'Best: '+d.best}</span><div class="card-actions"><button data-detail="${d.id}">View details</button>${discovered?'':`<button data-plan="${d.id}">Plan trip</button>`}</div></div></article>`}
-function scheduleDiscovery(query){if(query===discoveryQuery)return;discoveryQuery=query;discoveryResult=null;discoveryError='';clearTimeout(discoveryTimer);const request=++discoveryRequest;if(query.length<3)return;discoveryTimer=setTimeout(async()=>{discoveryLoading=true;renderDestinations();try{const response=await fetch(`${API_BASE_URL}/discover?q=${encodeURIComponent(query)}`),data=await response.json();if(!response.ok)throw new Error(data.error?.message||'No destination details were found.');if(request!==discoveryRequest||$('#searchInput').value.trim()!==query)return;discoveryResult={...data,interests:['nature','culture','food']};}catch(error){if(request===discoveryRequest)discoveryError=error.message;}finally{if(request===discoveryRequest){discoveryLoading=false;renderDestinations();}}},350)}
+function scheduleDiscovery(query){if(query===discoveryQuery)return;discoveryQuery=query;discoveryResult=null;discoveryError='';clearTimeout(discoveryTimer);const request=++discoveryRequest;if(query.length<3)return;discoveryTimer=setTimeout(async()=>{discoveryLoading=true;renderDestinations();try{const response=await fetch(`${API_BASE_URL}/discover?q=${encodeURIComponent(query)}`),data=await response.json();if(!response.ok)throw new Error(data.error?.message||'No destination details were found.');if(request!==discoveryRequest||$('#searchInput').value.trim()!==query)return;rememberDiscoveredDestination(data);}catch(error){if(request===discoveryRequest)discoveryError=error.message;}finally{if(request===discoveryRequest){discoveryLoading=false;renderDestinations();}}},350)}
 function renderDestinations(){const query=$('#searchInput').value.trim(),items=destinations.filter(matches);if(!items.length&&query.length>=3)scheduleDiscovery(query);const discovered=discoveryResult&&discoveryQuery===query&&matches(discoveryResult)?[discoveryResult]:[],visible=items.length?items:discovered;$('#resultsCount').textContent=visible.length?`${visible.length} ${visible.length===1?'destination':'destinations'} found`:(discoveryLoading?'Finding destination details…':'0 destinations found');grid.innerHTML=visible.length?visible.map(destinationCard).join(''):(discoveryLoading?'<p class="empty">SmartYatra is preparing a destination discovery card…</p>':discoveryError?`<p class="empty">${escapeHtml(discoveryError)}</p>`:'<p class="empty">No destination matches yet. Keep typing to let SmartYatra discover it for you.</p>')}
 function destination(id){return allDestinations().find(d=>d.id===id)}
 function addDiscoveredDestinationToPlanner(place){
@@ -56,6 +61,7 @@ function addDiscoveredDestinationToPlanner(place){
 let routeStopIds=JSON.parse(localStorage.getItem('smartYatraRouteStops')||'[]');
 let activeRouteStopId=localStorage.getItem('smartYatraActiveRouteStop')||'';
 let currentTripId=localStorage.getItem('smartYatraCurrentTrip')||'';
+let currentTripDestinationId=localStorage.getItem('smartYatraCurrentTripDestination')||'';
 let serviceRequestToken=0;
 const routeKey=place=>place?.slug||place?.id;
 function persistRoute(){localStorage.setItem('smartYatraRouteStops',JSON.stringify(routeStopIds))}
@@ -72,8 +78,9 @@ function renderTravelAssistant(){
   if(places.length&&!places.some(place=>place.id===activeRouteStopId))setActiveRouteStop(places[0].id);
   const selected=activeRoutePlace();
   stops.innerHTML=places.length?places.map((place,index)=>`<div class="route-stop ${place.id===selected?.id?'is-active':''}" data-route-active="${place.id}" role="button" tabindex="0" aria-label="Show local guidance for ${place.name}"><b>${String(index+1).padStart(2,'0')}</b><span><strong>${place.name}</strong><small>${place.region}</small></span><button data-remove-route="${place.id}" aria-label="Remove ${place.name}">×</button></div>`).join(''):'<p class="route-empty">Add two or more destinations to create a multi-stop city route.</p>';
-  const crowdLevel=selected?.style==='heritage'?'High':selected?.style==='beach'?'Moderate':'Comfortable';
-  crowd.innerHTML=selected?`<div class="crowd-badge ${crowdLevel.toLowerCase()}">${crowdLevel}</div><h4>${selected.name} visitor outlook</h4><p>Best window: <strong>early morning or late afternoon</strong>. The suggested route places this stop away from peak visitor hours.</p><small>Planning estimate — not live crowd data.</small>`:'';
+  const crowdLevel=place=>place?.style==='heritage'?'High':place?.style==='beach'?'Moderate':'Comfortable';
+  const guidancePlaces=places.length?places:[selected].filter(Boolean);
+  crowd.innerHTML=guidancePlaces.map((place,index)=>{const level=crowdLevel(place),active=place.id===selected?.id;const window=level==='High'?'8:00–10:00 AM':level==='Moderate'?'7:30–10:30 AM':'9:00–11:30 AM';return `<article class="timing-option ${active?'is-active':''}" data-route-active="${place.id}" role="button" tabindex="0"><div><span>STOP ${String(index+1).padStart(2,'0')}</span><b class="crowd-badge ${level.toLowerCase()}">${level}</b></div><h4>${place.name}</h4><p><strong>${window}</strong> · quieter planning window</p></article>`}).join('')+'<small>Planning guidance only — check live local conditions before travel.</small>';
   const serviceCopy={beach:['Seaside Haven Hotel','Coastal Table','Private cab from ₹1,200'],mountain:['Valley View Stay','Hillside Kitchen','Day cab from ₹1,600'],heritage:['Heritage Courtyard','Local Flavours','City cab from ₹1,000'],wildlife:['Forest Edge Lodge','Plantation Café','Day cab from ₹1,500'],adventure:['Trailside Camp','Explorer’s Kitchen','4×4 cab from ₹2,200']}[selected?.style]||['Local Stay','Neighbourhood Kitchen','Cab on request'];
   services.innerHTML=`<div class="service-group"><span>STAY NEAR ${selected?.name||'YOUR DESTINATION'}</span><strong>${serviceCopy[0]}</strong><small>Comfortable base for your day plan</small></div><div class="service-group"><span>LOCAL DINING</span><strong>${serviceCopy[1]}</strong><small>Popular regional flavours nearby</small></div><div class="vehicle-options"><p>VEHICLE OPTIONS</p>${['Compact cab','SUV / family','Tempo traveller'].map((vehicle,index)=>`<button data-vehicle="${vehicle}" type="button"><span>${vehicle}</span><b>${index===0?serviceCopy[2]:index===1?'From ₹2,000':'From ₹3,400'}</b></button>`).join('')}</div>`;
   persistRoute();
@@ -100,12 +107,12 @@ async function discoverRouteStop(){
   try{
     const response=await fetch(`${API_BASE_URL}/discover?q=${encodeURIComponent(query)}`),place=await response.json();
     if(!response.ok)throw new Error(place.error?.message||'Destination details could not be found.');
-    discoveryResult={...place,interests:['nature','culture','food']};
+    const discovered=rememberDiscoveredDestination(place);
     discoveryQuery=query;
-    addDiscoveredDestinationToPlanner(discoveryResult);
-    addRouteStop(discoveryResult.id);
+    addDiscoveredDestinationToPlanner(discovered);
+    addRouteStop(discovered.id);
     input.value='';
-    showToast(`${discoveryResult.name} was discovered and added to your route.`);
+    showToast(`${discovered.name} was discovered and added to your route.`);
   }catch(error){showToast(error.message)}
 }
 function optimiseRoute(){if(routeStopIds.length<2){showToast('Add at least two places to optimise your route.');return}routeStopIds.sort((a,b)=>{const order={heritage:1,food:2,beach:3,mountain:4,wildlife:5,adventure:6};return (order[destination(a)?.style]||9)-(order[destination(b)?.style]||9)});renderTravelAssistant();showToast('Your route is organised for a smoother day of travel.');}
@@ -113,7 +120,8 @@ function openModal(id){const d=destination(id),[primary,accent,soft]=destination
 function closeModals(){document.querySelectorAll('.modal').forEach(m=>{m.classList.remove('open');m.setAttribute('aria-hidden','true')})}
 function renderWishlist(){const items=wishlist.map(destination).filter(Boolean);$('#wishlistContent').innerHTML=items.length?items.map(d=>`<article class="wishlist-row"><img src="${d.image}" alt="${d.name}, ${d.region}"><div class="wishlist-place"><p>${d.region}</p><strong>${d.name}</strong><span>★ ${d.rating} · from ${money(d.cost)}/day</span></div><div class="wishlist-actions"><button class="wishlist-plan" data-plan="${d.id}">Plan trip <span>→</span></button><button class="wishlist-remove" data-save="${d.id}" aria-label="Remove ${d.name} from saved places">Remove</button></div></article>`).join(''):'<div class="wishlist-empty"><span>♡</span><h3>Your shortlist is waiting</h3><p>Save a destination you love and it will appear here for your next plan.</p><a href="#explore" data-close-modal>Explore destinations <b>→</b></a></div>'}
 function openWishlist(){closeModals();renderWishlist();$('#wishlistModal').classList.add('open');$('#wishlistModal').setAttribute('aria-hidden','false')}
-function planFor(id){const selected=destination(id);if(!selected)return;addDiscoveredDestinationToPlanner(selected);$('#tripDestination').value=id;setPlannerDestinationTheme(selected);if(!routeStopIds.includes(id))routeStopIds.unshift(id);setActiveRouteStop(id);renderTravelAssistant();closeModals();location.hash='planner';showToast(`${selected.name} added to your trip form`) }
+function applyPlanFor(selected){addDiscoveredDestinationToPlanner(selected);$('#tripDestination').value=selected.id;setPlannerDestinationTheme(selected);if(!routeStopIds.includes(selected.id))routeStopIds.unshift(selected.id);setActiveRouteStop(selected.id);renderTravelAssistant();closeModals();location.hash='planner';showToast(`${selected.name} added to your trip form`)}
+async function planFor(id){const selected=destination(id);if(!selected)return;try{applyPlanFor(await persistDiscoveredDestination(selected));}catch(error){showToast(error.message)}}
 function recommendDemo(event){event.preventDefault();const d=destination($('#tripDestination').value),start=new Date($('#startDate').value),end=new Date($('#endDate').value),travellers=Number($('#travellers').value),budget=Number($('#tripBudget').value);if(!d||Number.isNaN(start)||Number.isNaN(end)||end<start){showToast('Choose valid start and end dates.');return}const days=Math.floor((end-start)/86400000)+1,interests=[...document.querySelectorAll('.interest-options input:checked')].map(x=>x.value),daily=budget/(days*travellers);const ranked=destinations.map(x=>({d:x,score:x.interests.filter(i=>interests.includes(i)).length*3+(x.cost<=daily?2:0)+(x.id===d.id?2:0)})).sort((a,b)=>b.score-a.score).slice(0,3);const estimate=Math.round(d.cost*days*travellers);$('#recommendationBox').innerHTML=`<div class="recommendation-list">${ranked.map(({d:x})=>`<article><p class="match">${x.id===d.id?'Your selected destination':'Good alternative'}</p><h3>${x.name}</h3><p>${x.interests.filter(i=>interests.includes(i)).length?`Matches ${x.interests.filter(i=>interests.includes(i)).join(' and ')}`:'Fits your travel budget'}.</p><p><strong>${money(x.cost)}/day</strong> · ★ ${x.rating}</p></article>`).join('')}</div>`;const budgetStatus=estimate<=budget?`within your ₹${budget.toLocaleString('en-IN')} target`:`about ₹${(estimate-budget).toLocaleString('en-IN')} over your target`;showToast(`${days}-day estimate for ${travellers}: ${money(estimate)} — ${budgetStatus}.`);location.hash='recommendations'}
 
 function getCleanRegion(city,state,name){
@@ -214,15 +222,34 @@ document.addEventListener('click',event=>{
 
 $('#tripForm').addEventListener('submit',showEstimateSummary);
 
+async function persistDiscoveredDestination(place){
+  if(!place?.isDiscovery||!session)return place;
+  const response=await fetch(`${API_BASE_URL}/discovered-destinations`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.token}`},body:JSON.stringify(place)});
+  const saved=await response.json();
+  if(!response.ok)throw new Error(saved.error?.message||'Discovered destination could not be saved.');
+  const previousId=place.id,updated={...place,id:saved.id,slug:saved.slug,cost:Number(saved.dailyCost),best:saved.bestSeason};
+  const index=discoveredDestinations.findIndex(item=>item.id===previousId||item.slug===place.slug);
+  if(index>=0)discoveredDestinations[index]=updated;else discoveredDestinations.push(updated);
+  routeStopIds=routeStopIds.map(id=>id===previousId?updated.id:id);
+  if(activeRouteStopId===previousId)setActiveRouteStop(updated.id);
+  if(discoveryResult?.id===previousId)discoveryResult=updated;
+  const option=[...$('#tripDestination').options].find(item=>item.value===previousId);
+  if(option){option.value=updated.id;option.textContent=`${formatDestinationOption(updated)} · Discovery`;}
+  if($('#tripDestination').value===previousId)$('#tripDestination').value=updated.id;
+  persistDiscoveredDestinations();persistRoute();return updated;
+}
 async function ensureCurrentTrip(){
-  if(currentTripId)return currentTripId;
-  const selected=activeRoutePlace()||destination($('#tripDestination').value);
+  const selected=await persistDiscoveredDestination(activeRoutePlace()||destination($('#tripDestination').value));
   if(!selected)throw new Error('Choose a destination before requesting a cab.');
+  if(currentTripId&&currentTripDestinationId===selected.id)return currentTripId;
+  currentTripId='';currentTripDestinationId='';localStorage.removeItem('smartYatraCurrentTrip');localStorage.removeItem('smartYatraCurrentTripDestination');
   const response=await fetch(`${API_BASE_URL}/trips`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.token}`},body:JSON.stringify({destinationId:selected.id,title:`My ${selected.name} Adventure`,startDate:$('#startDate').value,endDate:$('#endDate').value,travelers:Number($('#travellers').value)||1,budget:Number($('#tripBudget').value)||0,travelStyle:$('#tripStyle').value,routeStopIds:[...new Set([selected.id,...routeStopIds]) ]})});
   const trip=await response.json();
   if(!response.ok)throw new Error(trip.error?.message||'Trip could not be saved.');
   currentTripId=trip.id;
+  currentTripDestinationId=selected.id;
   localStorage.setItem('smartYatraCurrentTrip',currentTripId);
+  localStorage.setItem('smartYatraCurrentTripDestination',currentTripDestinationId);
   return currentTripId;
 }
 async function createVehicleBooking(providerId, providerName){
@@ -236,6 +263,10 @@ async function createVehicleBooking(providerId, providerName){
     await loadMyTrips();
     showToast(`${providerName} request and your trip are saved in My trips.`);
   }catch(error){showToast(error.message)}
+}
+async function saveVehiclePlanningTrip(vehicleName){
+  if(!session){showToast('Sign in to save this cab plan in My trips.');openAuth();return}
+  try{await ensureCurrentTrip();location.hash='my-trips';await loadMyTrips();showToast(`${vehicleName} plan and your destination are saved in My trips.`);}catch(error){showToast(error.message)}
 }
 async function recordEmergencyAlert(position){
   const status=$('#sosStatus'),selected=destination($('#tripDestination').value);
@@ -259,7 +290,7 @@ document.addEventListener('click',event=>{
   if(event.target.closest('[data-clear-route]')){routeStopIds=[];setActiveRouteStop('');renderTravelAssistant();showToast('Your city-day route has been cleared.');return}
   if(event.target.closest('[data-optimize-route]')){optimiseRoute();return}
   const vehicle=event.target.closest('[data-vehicle]');
-  if(vehicle){const providerId=vehicle.dataset.providerId;if(providerId)createVehicleBooking(providerId,vehicle.dataset.vehicle);else showToast(`${vehicle.dataset.vehicle} is available as a planning preference.`);return}
+  if(vehicle){const providerId=vehicle.dataset.providerId;if(providerId)createVehicleBooking(providerId,vehicle.dataset.vehicle);else saveVehiclePlanningTrip(vehicle.dataset.vehicle);return}
   if(event.target.closest('[data-share-location]')){const status=$('#sosStatus');if(!navigator.geolocation){status.textContent='Location sharing is not available in this browser.';return}status.textContent='Getting your location…';navigator.geolocation.getCurrentPosition(position=>{recordEmergencyAlert(position);showToast('Your location is ready to share.');},()=>{status.textContent='Location permission was not granted. Call 112 if help is urgent.'});}
 });
 
