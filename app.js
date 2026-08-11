@@ -44,9 +44,9 @@ function saveWishlist(){localStorage.setItem('yatraSmartWishlist',JSON.stringify
 let discoveredDestinations=JSON.parse(localStorage.getItem('smartYatraDiscoveredDestinations')||'[]').filter(place=>place&&place.id&&place.isDiscovery),discoveryResult=null,discoveryQuery='',discoveryLoading=false,discoveryError='',discoveryTimer=null,discoveryRequest=0;
 const discoveryBudgetByStyle={beach:5200,mountain:4000,wildlife:4400,heritage:3400,adventure:4600,city:3800};
 const conciseDiscoverySummary=text=>{const sentences=String(text||'').match(/[^.!?]+[.!?]+/g)?.map(sentence=>sentence.trim()).filter(Boolean)??[];const summary=(sentences.slice(0,2).join(' ')||String(text||'')).trim();return summary.length>300?`${summary.slice(0,297).trimEnd()}…`:summary};
-discoveredDestinations=discoveredDestinations.map(place=>({...place,cost:Number(place.cost)||discoveryBudgetByStyle[place.style]||3800,summary:conciseDiscoverySummary(place.summary),best:place.best||'Check local seasonal guidance',attractions:Array.isArray(place.attractions)&&place.attractions.length?place.attractions:['Local landmarks','Regional food','Neighbourhood walks'],interests:place.interests||['nature','culture','food']}));
+discoveredDestinations=discoveredDestinations.map(place=>({...place,region:place.region==='Destination discovery'?'India':place.region||'India',cost:Number(place.cost)||discoveryBudgetByStyle[place.style]||3800,summary:conciseDiscoverySummary(place.summary),best:place.best||'Check local seasonal guidance',attractions:Array.isArray(place.attractions)&&place.attractions.length?place.attractions:['Local landmarks','Regional food','Neighbourhood walks'],interests:place.interests||['nature','culture','food']}));
 function persistDiscoveredDestinations(){localStorage.setItem('smartYatraDiscoveredDestinations',JSON.stringify(discoveredDestinations))}
-function rememberDiscoveredDestination(place){const normalised={...place,isDiscovery:true,cost:Number(place.cost)||discoveryBudgetByStyle[place.style]||3800,summary:conciseDiscoverySummary(place.summary),rating:Number(place.rating)||0,best:place.best||'Check local seasonal guidance',attractions:Array.isArray(place.attractions)&&place.attractions.length?place.attractions:['Local landmarks','Regional food','Neighbourhood walks'],interests:place.interests||['nature','culture','food']};const index=discoveredDestinations.findIndex(item=>item.slug===normalised.slug);if(index>=0)discoveredDestinations[index]=normalised;else discoveredDestinations.push(normalised);discoveryResult=normalised;persistDiscoveredDestinations();return normalised}
+function rememberDiscoveredDestination(place){const normalised={...place,isDiscovery:true,region:place.region==='Destination discovery'?'India':place.region||'India',cost:Number(place.cost)||discoveryBudgetByStyle[place.style]||3800,summary:conciseDiscoverySummary(place.summary),rating:Number(place.rating)||0,best:place.best||'Check local seasonal guidance',attractions:Array.isArray(place.attractions)&&place.attractions.length?place.attractions:['Local landmarks','Regional food','Neighbourhood walks'],interests:place.interests||['nature','culture','food']};const index=discoveredDestinations.findIndex(item=>item.slug===normalised.slug);if(index>=0)discoveredDestinations[index]=normalised;else discoveredDestinations.push(normalised);discoveryResult=normalised;persistDiscoveredDestinations();return normalised}
 function allDestinations(){return [...destinations,...discoveredDestinations]}
 function matches(d){const q=$('#searchInput').value.toLowerCase().trim(),style=$('#styleFilter').value,budget=$('#budgetFilter').value;const search=!q||[d.name,d.region,d.style,d.summary,...(d.interests||[])].join(' ').toLowerCase().includes(q);const styleOK=style==='all'||d.style===style;const budgetOK=budget==='all'||(budget==='low'&&d.cost<2500)||(budget==='mid'&&d.cost>=2500&&d.cost<=5000)||(budget==='high'&&d.cost>5000);return search&&styleOK&&budgetOK}
 function destinationCard(d){const discovered=Boolean(d.isDiscovery),costLabel=discovered?'Details from a public travel reference':`from ${money(d.cost)}/day`,ratingLabel=discovered?'SmartYatra discovery':'★ '+d.rating;return `<article class="destination-card ${discovered?'discovery-card':''}"><button class="destination-image-button" data-detail="${d.id}" aria-label="View details for ${d.name}"><img src="${d.image}" alt="${d.name}, ${d.region}"><span>Explore ${d.name} <b>↗</b></span></button>${discovered?'':'<button class="save-card" data-save="'+d.id+'" aria-label="Save '+d.name+'">'+(wishlist.includes(d.id)?'♥':'♡')+'</button>'}<div class="card-content"><div class="meta"><span>${d.region}</span><span>${ratingLabel}</span></div><h3>${d.name}</h3><div class="meta"><span>${d.style}</span><span>${costLabel}</span></div><span class="tag">${discovered?'DISCOVERY RESULT · verify local details':'Best: '+d.best}</span><div class="card-actions"><button data-detail="${d.id}">View details</button>${discovered?'':`<button data-plan="${d.id}">Plan trip</button>`}</div></div></article>`}
@@ -56,7 +56,7 @@ function destination(id){return allDestinations().find(d=>d.id===id)}
 function addDiscoveredDestinationToPlanner(place){
   if(!place?.isDiscovery)return;
   const select=$('#tripDestination');
-  if(![...select.options].some(option=>option.value===place.id))select.insertAdjacentHTML('beforeend',`<option value="${place.id}">${formatDestinationOption(place)} · Discovery</option>`);
+  if(![...select.options].some(option=>option.value===place.id))select.insertAdjacentHTML('beforeend',`<option value="${place.id}">${formatDestinationOption(place)}</option>`);
 }
 let routeStopIds=JSON.parse(localStorage.getItem('smartYatraRouteStops')||'[]');
 let activeRouteStopId=localStorage.getItem('smartYatraActiveRouteStop')||'';
@@ -71,7 +71,7 @@ function renderTravelAssistant(){
   const picker=$('#routeDestinationSelect'),stops=$('#routeStops'),crowd=$('#crowdInsights'),services=$('#localServices');
   if(!picker||!stops||!crowd||!services)return;
   const pickerValue=picker.value;
-  picker.innerHTML=allDestinations().map(d=>`<option value="${d.id}">${formatDestinationOption(d)}${d.isDiscovery?' · Discovery':''}</option>`).join('');
+  picker.innerHTML=allDestinations().map(d=>`<option value="${d.id}">${formatDestinationOption(d)}</option>`).join('');
   if([...picker.options].some(option=>option.value===pickerValue))picker.value=pickerValue;
   routeStopIds=routeStopIds.filter(id=>destination(id));
   const places=routeStopIds.map(destination).filter(Boolean);
@@ -80,7 +80,30 @@ function renderTravelAssistant(){
   stops.innerHTML=places.length?places.map((place,index)=>`<div class="route-stop ${place.id===selected?.id?'is-active':''}" data-route-active="${place.id}" role="button" tabindex="0" aria-label="Show local guidance for ${place.name}"><b>${String(index+1).padStart(2,'0')}</b><span><strong>${place.name}</strong><small>${place.region}</small></span><button data-remove-route="${place.id}" aria-label="Remove ${place.name}">×</button></div>`).join(''):'<p class="route-empty">Add two or more destinations to create a multi-stop city route.</p>';
   const crowdLevel=place=>place?.style==='heritage'?'High':place?.style==='beach'?'Moderate':'Comfortable';
   const guidancePlaces=places.length?places:[selected].filter(Boolean);
-  crowd.innerHTML=guidancePlaces.map((place,index)=>{const level=crowdLevel(place),active=place.id===selected?.id;const window=level==='High'?'8:00–10:00 AM':level==='Moderate'?'7:30–10:30 AM':'9:00–11:30 AM';return `<article class="timing-option ${active?'is-active':''}" data-route-active="${place.id}" role="button" tabindex="0"><div><span>STOP ${String(index+1).padStart(2,'0')}</span><b class="crowd-badge ${level.toLowerCase()}">${level}</b></div><h4>${place.name}</h4><p><strong>${window}</strong> · quieter planning window</p></article>`}).join('')+'<small>Planning guidance only — check live local conditions before travel.</small>';
+  const startValue=$('#startDate')?.value,endValue=$('#endDate')?.value;
+  const tripStart=startValue?new Date(`${startValue}T00:00:00`):null,tripEnd=endValue?new Date(`${endValue}T00:00:00`):null;
+  const totalDays=tripStart&&tripEnd&&!Number.isNaN(tripStart.valueOf())&&!Number.isNaN(tripEnd.valueOf())&&tripEnd>=tripStart?Math.floor((tripEnd-tripStart)/86400000)+1:guidancePlaces.length;
+  const dateFormat=new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short'});
+  const formatSchedule=(dayOffset,dayCount)=>{
+    if(!tripStart)return `Day ${dayOffset+1}`;
+    const start=new Date(tripStart);start.setDate(start.getDate()+dayOffset);
+    const end=new Date(start);end.setDate(end.getDate()+Math.max(0,dayCount-1));
+    const dayLabel=dayCount===1?`Day ${dayOffset+1}`:`Days ${dayOffset+1}–${dayOffset+dayCount}`;
+    return `${dayLabel} · ${dateFormat.format(start)}${dayCount>1?` – ${dateFormat.format(end)}`:''}`;
+  };
+  const visitWindows={heritage:['8:00 AM','10:30 AM','5:30 PM'],beach:['7:30 AM','11:00 AM','4:45 PM'],mountain:['7:00 AM','10:00 AM','4:30 PM'],wildlife:['6:30 AM','9:30 AM','4:00 PM'],adventure:['7:00 AM','10:30 AM','3:30 PM']};
+  let allocatedDays=0;
+  const timingCards=guidancePlaces.map((place,index)=>{
+    const remainingStops=guidancePlaces.length-index,remainingDays=Math.max(1,totalDays-allocatedDays);
+    const assignedDays=Math.max(1,Math.ceil(remainingDays/remainingStops));
+    const schedule=formatSchedule(allocatedDays,assignedDays);allocatedDays+=assignedDays;
+    const level=crowdLevel(place),active=place.id===selected?.id,window=visitWindows[place.style]?.[0]||'9:00 AM';
+    return `<article class="timing-option ${active?'is-active':''}" data-route-active="${place.id}" role="button" tabindex="0"><div><span>STOP ${String(index+1).padStart(2,'0')} · ${schedule}</span><b class="crowd-badge ${level.toLowerCase()}">${level}</b></div><h4>${place.name}</h4><p><strong>${window}</strong> · a calmer time to begin</p></article>`;
+  }).join('');
+  const selectedAttractions=(selected?.attractions?.length?selected.attractions:['Local landmark','Regional food stop','Scenic viewpoint']).slice(0,3);
+  const selectedWindows=visitWindows[selected?.style]||visitWindows.mountain;
+  const timingDetail=selected?`<section class="timing-detail"><p class="timing-detail-label">CURATED MOMENTS · ${selected.name}</p><h4>Make the most of this stop</h4><div class="timing-attractions">${selectedAttractions.map((attraction,index)=>`<article><b>${String(index+1).padStart(2,'0')}</b><span><strong>${attraction}</strong><small>${selectedWindows[index]||selectedWindows[0]} · best planning window</small></span></article>`).join('')}</div></section>`:'';
+  crowd.innerHTML=timingCards+timingDetail+'<small>Planning guidance only — check live local conditions before travel.</small>';
   const serviceCopy={beach:['Seaside Haven Hotel','Coastal Table','Private cab from ₹1,200'],mountain:['Valley View Stay','Hillside Kitchen','Day cab from ₹1,600'],heritage:['Heritage Courtyard','Local Flavours','City cab from ₹1,000'],wildlife:['Forest Edge Lodge','Plantation Café','Day cab from ₹1,500'],adventure:['Trailside Camp','Explorer’s Kitchen','4×4 cab from ₹2,200']}[selected?.style]||['Local Stay','Neighbourhood Kitchen','Cab on request'];
   services.innerHTML=`<div class="service-group"><span>STAY NEAR ${selected?.name||'YOUR DESTINATION'}</span><strong>${serviceCopy[0]}</strong><small>Comfortable base for your day plan</small></div><div class="service-group"><span>LOCAL DINING</span><strong>${serviceCopy[1]}</strong><small>Popular regional flavours nearby</small></div><div class="vehicle-options"><p>VEHICLE OPTIONS</p>${['Compact cab','SUV / family','Tempo traveller'].map((vehicle,index)=>`<button data-vehicle="${vehicle}" type="button"><span>${vehicle}</span><b>${index===0?serviceCopy[2]:index===1?'From ₹2,000':'From ₹3,400'}</b></button>`).join('')}</div>`;
   persistRoute();
@@ -144,6 +167,7 @@ function formatDestinationOption(d){
 }
 destinations.forEach(d=>$('#tripDestination').insertAdjacentHTML('beforeend',`<option value="${d.id}">${formatDestinationOption(d)}</option>`));
 $('#tripDestination').addEventListener('change',event=>{setPlannerDestinationTheme(destination(event.target.value));renderTravelAssistant()});
+['startDate','endDate'].forEach(id=>$('#'+id).addEventListener('change',renderTravelAssistant));
 async function loadDestinationsFromApi(){try{const response=await fetch(`${API_BASE_URL}/destinations`);if(!response.ok)throw new Error('Destination API unavailable');const apiDestinations=await response.json(),interestByCategory={beach:['food','nature','adventure'],mountain:['nature','adventure'],heritage:['culture','food'],wildlife:['nature','adventure'],nature:['nature','adventure','culture'],coastal:['food','culture','nature']},savedBeforeLoad=[...wishlist],selectedSlug=destination($('#tripDestination').value)?.slug;destinations.splice(0,destinations.length,...apiDestinations.map(d=>({id:d.id,slug:d.slug,name:d.name,region:getCleanRegion(d.city,d.state,d.name),style:d.category,cost:Number(d.dailyCost),rating:Number(d.rating),best:d.bestSeason,image:localPlaceImages[d.slug]||d.imageUrl||imageBySlug[d.slug]||'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1800&q=88',summary:d.summary,interests:interestByCategory[d.category]||['nature'],attractions:(d.attractions||[]).map(a=>a.name)})));wishlist=[...new Set(savedBeforeLoad.map(savedId=>destinations.find(d=>d.id===savedId||d.slug===savedId)?.id||savedId))];saveWishlist();$('#tripDestination').innerHTML=destinations.map(d=>`<option value="${d.id}">${formatDestinationOption(d)}</option>`).join('');const selected=destinations.find(d=>d.slug===selectedSlug)||destinations[0];if(selected){$('#tripDestination').value=selected.id;setPlannerDestinationTheme(selected)}renderDestinations();if(session)loadWishlist()}catch(error){console.warn('Using local destination data because the API is not running.',error)}}
 const today=new Date().toISOString().slice(0,10);$('#startDate').min=today;$('#endDate').min=today;$('#startDate').value=today;const after=new Date();after.setDate(after.getDate()+3);$('#endDate').value=after.toISOString().slice(0,10);
 ['searchInput','styleFilter','budgetFilter'].forEach(id=>$('#'+id).addEventListener('input',renderDestinations));$('#clearFilters').addEventListener('click',()=>{$('#searchInput').value='';$('#styleFilter').value='all';$('#budgetFilter').value='all';renderDestinations()});
@@ -234,7 +258,7 @@ async function persistDiscoveredDestination(place){
   if(activeRouteStopId===previousId)setActiveRouteStop(updated.id);
   if(discoveryResult?.id===previousId)discoveryResult=updated;
   const option=[...$('#tripDestination').options].find(item=>item.value===previousId);
-  if(option){option.value=updated.id;option.textContent=`${formatDestinationOption(updated)} · Discovery`;}
+  if(option){option.value=updated.id;option.textContent=formatDestinationOption(updated);}
   if($('#tripDestination').value===previousId)$('#tripDestination').value=updated.id;
   persistDiscoveredDestinations();persistRoute();return updated;
 }

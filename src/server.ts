@@ -88,18 +88,28 @@ app.get('/api/discover', async (req, res, next) => {
     if (!page) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No reliable destination details were found. Try a more specific place name.' } });
     const overview = conciseSummary(page.extract?.trim() || `${page.title} is available to explore with local planning research.`);
     const category = discoveryCategory(`${page.title} ${overview}`);
+    const suggestionsUrl = new URL('https://en.wikipedia.org/w/api.php');
+    suggestionsUrl.search = new URLSearchParams({ action: 'query', format: 'json', list: 'search', srsearch: `${page.title} tourist attractions`, srnamespace: '0', srlimit: '4', origin: '*' }).toString();
+    const suggestionsResponse = await fetch(suggestionsUrl, { headers: { accept: 'application/json' } });
+    const suggestionsPayload = suggestionsResponse.ok ? await suggestionsResponse.json() as { query?: { search?: Array<{ title: string }> } } : {};
+    const placeTerms = page.title.toLowerCase().split(/\s+/).filter(term => term.length > 3);
+    const attractions = (suggestionsPayload.query?.search ?? [])
+      .map(item => item.title)
+      .filter(title => title !== page.title && !/^list of /i.test(title))
+      .filter(title => placeTerms.some(term => title.toLowerCase().includes(term)))
+      .slice(0, 3);
     res.json({
       id: `discovery-${page.pageid}`,
       slug: `discovery-${page.pageid}`,
       name: page.title,
-      region: 'Destination discovery',
+      region: 'India',
       style: category,
       summary: overview,
       image: page.thumbnail?.source || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1800&q=88',
       cost: discoveryBudget(category),
       rating: 0,
       best: 'Check local seasonal guidance',
-      attractions: ['Local landmarks', 'Regional food', 'Neighbourhood walks'],
+      attractions: attractions.length ? attractions : ['Local landmarks', 'Regional food', 'Neighbourhood walks'],
       latitude: page.coordinates?.[0]?.lat ?? null,
       longitude: page.coordinates?.[0]?.lon ?? null,
       source: 'Wikipedia',
@@ -117,8 +127,8 @@ app.post('/api/discovered-destinations', requireAuth, async (req: AuthRequest, r
     const category = ['beach', 'mountain', 'wildlife', 'heritage', 'adventure', 'city'].includes(style) ? style : 'city';
     const destination = await prisma.destination.upsert({
       where: { slug },
-      update: { name: name.trim().slice(0, 120), city: name.trim().slice(0, 120), state: 'Discovered destination', category, summary: conciseSummary(summary), dailyCost: Number(cost), imageUrl: image, latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null, longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null, bestSeason: 'Check local seasonal guidance', status: ContentStatus.PUBLISHED },
-      create: { name: name.trim().slice(0, 120), slug, city: name.trim().slice(0, 120), state: 'Discovered destination', category, summary: conciseSummary(summary), dailyCost: Number(cost), imageUrl: image, latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null, longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null, bestSeason: 'Check local seasonal guidance', status: ContentStatus.PUBLISHED }
+      update: { name: name.trim().slice(0, 120), city: name.trim().slice(0, 120), state: 'India', category, summary: conciseSummary(summary), dailyCost: Number(cost), imageUrl: image, latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null, longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null, bestSeason: 'Check local seasonal guidance', status: ContentStatus.PUBLISHED },
+      create: { name: name.trim().slice(0, 120), slug, city: name.trim().slice(0, 120), state: 'India', category, summary: conciseSummary(summary), dailyCost: Number(cost), imageUrl: image, latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null, longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null, bestSeason: 'Check local seasonal guidance', status: ContentStatus.PUBLISHED }
     });
     res.status(201).json(toDestination(destination));
   } catch (error) { next(error); }
