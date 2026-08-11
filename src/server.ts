@@ -18,6 +18,7 @@ app.use(express.json({ limit: '200kb' }));
 type AuthRequest = Request & { user?: { id: string; role: Role } };
 const signToken = (id: string, role: Role) => jwt.sign({ sub: id, role }, secret, { expiresIn: '7d' });
 const toDestination = (d: any) => ({ ...d, dailyCost: Number(d.dailyCost), rating: Number(d.rating), attractions: d.attractions?.map((a: any) => ({ ...a, entryFee: Number(a.entryFee) })) });
+const discoveryCategory = (text: string) => /\b(beach|island|coast|sea|ocean)\b/i.test(text) ? 'beach' : /\b(mountain|hill|himalaya|valley|peak)\b/i.test(text) ? 'mountain' : /\b(wildlife|forest|national park|sanctuary)\b/i.test(text) ? 'wildlife' : /\b(fort|temple|palace|heritage|monument|museum)\b/i.test(text) ? 'heritage' : 'city';
 
 function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
@@ -64,6 +65,39 @@ app.get('/api/destinations', async (req, res, next) => {
       orderBy: [{ rating: 'desc' }, { name: 'asc' }]
     });
     res.json(destinations.map(toDestination));
+  } catch (error) { next(error); }
+});
+
+app.get('/api/discover', async (req, res, next) => {
+  try {
+    const query = typeof req.query.q === 'string' ? req.query.q.trim().replace(/\s+/g, ' ') : '';
+    if (query.length < 3 || query.length > 80) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Enter a destination between 3 and 80 characters.' } });
+    const wikipedia = new URL('https://en.wikipedia.org/w/api.php');
+    wikipedia.search = new URLSearchParams({ action: 'query', format: 'json', generator: 'search', gsrsearch: query, gsrnamespace: '0', gsrlimit: '5', prop: 'extracts|pageimages|coordinates', exintro: '1', explaintext: '1', piprop: 'thumbnail', pithumbsize: '1200', origin: '*' }).toString();
+    const lookup = await fetch(wikipedia, { headers: { accept: 'application/json' } });
+    if (!lookup.ok) throw new Error(`Discovery source returned ${lookup.status}`);
+    const result = await lookup.json() as { query?: { pages?: Record<string, { pageid: number; title: string; extract?: string; thumbnail?: { source?: string }; coordinates?: Array<{ lat: number; lon: number }> }> } };
+    const pages = Object.values(result.query?.pages ?? {});
+    const page = pages.find(item => item.extract || item.thumbnail?.source);
+    if (!page) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No reliable destination details were found. Try a more specific place name.' } });
+    const overview = page.extract?.trim() || `${page.title} is available to explore with local planning research.`;
+    res.json({
+      id: `discovery-${page.pageid}`,
+      slug: `discovery-${page.pageid}`,
+      name: page.title,
+      region: 'Destination discovery',
+      style: discoveryCategory(`${page.title} ${overview}`),
+      summary: overview,
+      image: page.thumbnail?.source || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1800&q=88',
+      cost: 0,
+      rating: 0,
+      best: 'Check local seasonal guidance',
+      attractions: ['Local landmarks', 'Regional food', 'Neighbourhood walks'],
+      latitude: page.coordinates?.[0]?.lat ?? null,
+      longitude: page.coordinates?.[0]?.lon ?? null,
+      source: 'Wikipedia',
+      isDiscovery: true
+    });
   } catch (error) { next(error); }
 });
 
