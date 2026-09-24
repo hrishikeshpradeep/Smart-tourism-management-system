@@ -405,6 +405,12 @@ function startHeroSlideshow(){
 
 const hostedVideoBase='https://rajxgulcgxjxzxjgbpzo.supabase.co/storage/v1/object/public/tourism-videos';
 const hostedVideoUrl=file=>`${hostedVideoBase}/${encodeURIComponent(file)}`;
+const videoFallbackImages={
+  jaipur:'assets/place-jaipur.jpg', varanasi:'assets/place-varanasi.jpg', manali:'assets/place-manali.jpg',
+  goa:'assets/place-goa.jpg', ladakh:'assets/place-ladakh.jpg', munnar:'assets/place-munnar.jpg',
+  kashmir:'assets/place-kashmir-snow.png', coorg:'assets/place-coorg-hills.png', ooty:'assets/place-ooty-nilgiri-train.png'
+};
+const videoFallbackImage=placeId=>videoFallbackImages[placeId]||'assets/place-jaipur.jpg';
 const heroVideos=[
   {place:'Jaipur',region:'Rajasthan',file:'hero-jaipur.mp4',line:'Step into stories carved in stone and colour.'},
   {place:'Varanasi',region:'Uttar Pradesh',file:'hero-varanasi.mp4',line:'Feel the living spirit of India by the Ganges.'},
@@ -453,7 +459,16 @@ function setPlannerDestinationTheme(place){
 function startPlannerVideoFlow(){
   const first=$('#plannerVideo'),second=$('#plannerVideoNext');
   if(!first||!second)return;
-  let index=0,active=first,standby=second,changing=false,playlist=[],activeStart=0,changeRequest=0;
+  let index=0,active=first,standby=second,changing=false,playlist=[],activeStart=0,changeRequest=0,activePlaceId='goa',videosUnavailable=false;
+  const showFallback=()=>{
+    if(videosUnavailable)return;
+    videosUnavailable=true;
+    first.pause();second.pause();
+    const selected=destination(activePlaceId)||destinations.find(d=>d.slug===activePlaceId);
+    const planner=$('#planner');
+    planner.classList.add('planner-video-unavailable');
+    planner.style.setProperty('--planner-fallback-image',`url("${selected?.image||videoFallbackImage(activePlaceId)}")`);
+  };
   const setSource=(video,clip,autoplay=false,onReady)=>{video.src=hostedVideoUrl(clip.file);video.load();video.addEventListener('loadedmetadata',()=>{video.currentTime=Math.min(clip.start,Math.max(0,video.duration-4.8));if(autoplay)video.play().catch(()=>{});onReady?.();},{once:true});};
   const advance=()=>{
     if(changing)return;
@@ -462,12 +477,13 @@ function startPlannerVideoFlow(){
     const fade=()=>{standby.play().catch(()=>{});standby.style.opacity='1';active.style.opacity='0';window.setTimeout(()=>{const outgoing=active;outgoing.pause();outgoing.currentTime=0;active=standby;activeStart=nextClip.start;standby=outgoing;setSource(standby,playlist[(index+1)%playlist.length]);changing=false;},650);};
     if(standby.readyState>=3)fade();else standby.addEventListener('canplay',fade,{once:true});
   };
-  const setPlace=placeId=>{const selected=destination(placeId)||destinations.find(d=>d.slug===placeId);const videoKey=selected?.slug||placeId;const file=plannerVideoByDestination[videoKey]||'ladakh.mp4',nextPlaylist=[0,5,10,15,20,25].map(start=>({file,start})),request=++changeRequest;
+  const setPlace=placeId=>{const selected=destination(placeId)||destinations.find(d=>d.slug===placeId);const videoKey=selected?.slug||placeId;activePlaceId=videoKey;const file=plannerVideoByDestination[videoKey]||'ladakh.mp4',nextPlaylist=[0,5,10,15,20,25].map(start=>({file,start})),request=++changeRequest;
+    if(videosUnavailable){$('#planner').style.setProperty('--planner-fallback-image',`url("${selected?.image||videoFallbackImage(videoKey)}")`);return;}
     if(!active.src){playlist=nextPlaylist;index=0;activeStart=0;setSource(active,playlist[0],true);setSource(standby,playlist[1]);return;}
     changing=true;
     setSource(standby,nextPlaylist[0],false,()=>{if(request!==changeRequest)return;standby.play().catch(()=>{});standby.style.opacity='1';active.style.opacity='0';window.setTimeout(()=>{if(request!==changeRequest)return;const outgoing=active;outgoing.pause();active=standby;standby=outgoing;playlist=nextPlaylist;index=0;activeStart=0;setSource(standby,playlist[1]);changing=false;},650);});
   };
-  [first,second].forEach(video=>{video.addEventListener('timeupdate',()=>{if(video===active&&video.currentTime>=activeStart+4.7)advance()});video.addEventListener('ended',()=>{if(video===active)advance()})});
+  [first,second].forEach(video=>{video.addEventListener('timeupdate',()=>{if(video===active&&video.currentTime>=activeStart+4.7)advance()});video.addEventListener('ended',()=>{if(video===active)advance()});video.addEventListener('error',()=>{if(video===active)showFallback()})});
   plannerVideoController={setPlace};
   setPlace($('#tripDestination').value||'goa');
 }
@@ -508,10 +524,20 @@ function legacyVideoHero(){
 function startSmoothHeroFlow(){
   const copy=document.querySelector('.hero-video-layer .hero-copy'),first=$('#heroVideo'),second=$('#heroVideoNext');
   if(!copy||!first||!second)return;
-  let index=0,changing=false,activeVideo=first,standbyVideo=second;
+  let index=0,changing=false,activeVideo=first,standbyVideo=second,videosUnavailable=false;
+  const showFallback=entry=>{
+    if(videosUnavailable)return;
+    videosUnavailable=true;
+    first.pause();second.pause();
+    const layer=document.querySelector('.hero-video-layer');
+    layer.classList.add('hero-video-unavailable');
+    layer.style.setProperty('--hero-fallback-image',`url("${videoFallbackImage(entry.place.toLowerCase())}")`);
+    updateCopy(entry);
+  };
   const updateCopy=entry=>{copy.innerHTML=`<p class="eyebrow">SMART<span class="brand-yatra">YATRA</span> &middot; ${entry.region.toUpperCase()}</p><h1>Discover <em>${entry.place}.</em></h1><p class="hero-text">${entry.line}</p><a class="primary-button hero-cta" href="#explore">Unleash your dream destination <span>&rarr;</span></a><p class="hero-footnote">CURATED DESTINATIONS &middot; MADE FOR EXPLORERS</p>`};
   const setSource=(video,entry)=>{video.src=hostedVideoUrl(entry.file);video.load();video.setAttribute('aria-label',`Scenic video of ${entry.place}, ${entry.region}`)};
   const advance=()=>{
+    if(videosUnavailable)return;
     if(changing)return;
     changing=true;index=(index+1)%heroVideos.length;
     const nextEntry=heroVideos[index];
@@ -523,7 +549,7 @@ function startSmoothHeroFlow(){
     if(standbyVideo.readyState>=3)fade();else standbyVideo.addEventListener('canplay',fade,{once:true});
   };
   setSource(activeVideo,heroVideos[0]);setSource(standbyVideo,heroVideos[1]);updateCopy(heroVideos[0]);
-  [first,second].forEach(video=>{video.addEventListener('timeupdate',()=>{if(video===activeVideo&&video.currentTime>=4.7)advance()});video.addEventListener('ended',()=>{if(video===activeVideo)advance()})});
+  [first,second].forEach(video=>{video.addEventListener('timeupdate',()=>{if(video===activeVideo&&video.currentTime>=4.7)advance()});video.addEventListener('ended',()=>{if(video===activeVideo)advance()});video.addEventListener('error',()=>{if(video===activeVideo)showFallback(heroVideos[index])})});
 }
 
 startSmoothHeroFlow();
