@@ -403,7 +403,7 @@ function startHeroSlideshow(){
   setInterval(updateHero,4500);
 }
 
-const hostedVideoBase='https://rajxgulcgxjxzxjgbpzo.supabase.co/storage/v1/object/public/tourism-videos';
+const hostedVideoBase='assets/web';
 const hostedVideoUrl=file=>`${hostedVideoBase}/${encodeURIComponent(file)}`;
 const videoFallbackImages={
   jaipur:'assets/place-jaipur.jpg', varanasi:'assets/place-varanasi.jpg', manali:'assets/place-manali.jpg',
@@ -414,13 +414,13 @@ const videoFallbackImage=placeId=>videoFallbackImages[placeId]||'assets/place-ja
 const heroVideos=[
   {place:'Jaipur',region:'Rajasthan',file:'hero-jaipur.mp4',line:'Step into stories carved in stone and colour.'},
   {place:'Varanasi',region:'Uttar Pradesh',file:'hero-varanasi.mp4',line:'Feel the living spirit of India by the Ganges.'},
-  {place:'Manali',region:'Himachal Pradesh',file:'manali.mp4',line:'Take the high road into the Himalayas.'},
+  {place:'Manali',region:'Himachal Pradesh',file:'hero-manali.mp4',line:'Take the high road into the Himalayas.'},
   {place:'Goa',region:'India',file:'hero-goa.mp4',line:'Follow the coast where every sunset feels new.'},
   {place:'Ladakh',region:'India',file:'hero-ladakh.mp4',line:'Chase open roads across the roof of India.'},
   {place:'Munnar',region:'Kerala',file:'hero-munnar.mp4',line:'Breathe in the calm of the tea-covered hills.'},
   {place:'The Himalayas',region:'Uttarakhand',file:'hero-himalaya.mp4',line:'Find wonder above the clouds.'},
   {place:'Kashmir',region:'India',file:'hero-kashmir.mp4',line:'Drift through valleys that feel like a dream.'},
-  {place:'Andaman',region:'India',file:'andaman.mp4',line:'Follow the island horizon into clear blue water.'}
+  {place:'Himalayan escape',region:'India',file:'hero-himalaya.mp4',line:'Find a new perspective above the clouds.'}
 ];
 
 const plannerVideoByDestination={goa:'goa.mp4',manali:'manali.mp4',munnar:'munnar.mp4',jaipur:'jaipur.mp4',varanasi:'varanasi.mp4',kashmir:'kashmir.mp4',ladakh:'ladakh.mp4',rishikesh:'rishikesh.mp4',coorg:'coorg.mp4',ooty:'ooty.mp4',darjeeling:'darjeeling.mp4',hampi:'hampi.mp4',udaipur:'udaipur.mp4',pondicherry:'pondicherry.mp4',andaman:'andaman.mp4'};
