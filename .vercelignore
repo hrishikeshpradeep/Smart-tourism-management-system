@@ -1,0 +1,15 @@
+# Keep only the small hero clips required by the submitted website.
+assets/raw-downloads/
+assets/*.mp4
+assets/web/*.mp4
+!assets/web/hero-jaipur.mp4
+!assets/web/hero-varanasi.mp4
+!assets/web/hero-manali.mp4
+!assets/web/hero-goa.mp4
+!assets/web/hero-ladakh.mp4
+!assets/web/hero-munnar.mp4
+!assets/web/hero-himalaya.mp4
+!assets/web/hero-kashmir.mp4
+
+# Local report output is not part of the deployed website.
+output/
